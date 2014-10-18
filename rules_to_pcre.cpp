@@ -205,7 +205,7 @@ main (int argc, char** argv)
     separatorString += (std::string(1, sm->first) + "|");
   }
   *(separatorString.rbegin()) = ')';
-  separatorString = "(.*\\/\\w*" + separatorString + "\\w*)";
+  separatorString = "(pcre:\"\\/.*\\/\\w*)" + separatorString + "(\\w*\")";
   pcrecpp::RE pcrePattern(separatorString);
 
   for (std::vector<std::string>::const_iterator option = allOptions.begin(); option != allOptions.end(); ++option) {
@@ -227,12 +227,12 @@ main (int argc, char** argv)
       }
       else { // type == "pcre"
         pcrecpp::StringPiece contentString(thisContent);
-        std::string pcreString, modifier;
-        if (pcrePattern.Consume(&contentString, &pcreString, &modifier)) {
-          std::cout << "pcre --> " << pcreString << " " << modifier << std::endl;
+        std::string pcreString, modifier, suffix;
+        if (pcrePattern.Consume(&contentString, &pcreString, &modifier, &suffix)) {
           if (!modifier.empty()) {
             index = (separatorModifiers.find(modifier[0]))->second;
-            pcreString = pcreString.replace(pcreString.find(modifier), 1, "");
+            pcreString += suffix;
+            pcreString += contentString.as_string();
           }
           contentVectors[index].push_back(pcreString);
         }
