@@ -2,6 +2,7 @@
 #include <iostream>
 #include <map>
 #include <string>
+#include <sstream>
 
 #include <pcrecpp.h>
 
@@ -158,16 +159,86 @@ parseRulesFiles (const std::vector<std::string>& rulesFiles)
 std::string
 getContentPattern (const std::vector<std::string>& patternVector)
 {
+  pcrecpp::RE contentPattern("content:\"(.*)\"");
+  pcrecpp::RE contentParamPattern("(offset|depth|distance|within):(\\d+)");
+  pcrecpp::RE pcrePattern("pcre:\"\\/(.*)[\\/]?(\\w*)\"", pcrecpp::RE_Options(PCRE_UNGREEDY));
+
   std::string patternString;
-  pcrecpp::RE paramPattern("(offset|depth|distance|within):(\\d+)");
+  std::vector<std::string> independentPatterns;
   for (std::vector<std::string>::const_iterator pattern = patternVector.begin(); pattern != patternVector.end(); ++pattern) {
+    std::string thisPattern, thisModifiers;
+    bool relativePattern = false;
+
     pcrecpp::StringPiece pString(*pattern);
-    std::string param;
-    int value;
-    while (paramPattern.FindAndConsume(&pString, &param, &value)) {
-      std::cout << param << " = " << value << std::endl;
+    if ((*pattern).compare(0, 7, "content") == 0) {
+      std::string contentString;
+      int offset = 0, depth = 0;
+      if (contentPattern.Consume(&pString, &contentString)) {
+        if (pString.as_string().find("nocase;") != std::string::npos) {
+          thisModifiers = "i";
+        }
+        std::string param;
+        int value;
+        while (contentParamPattern.FindAndConsume(&pString, &param, &value)) {
+          if (value < 0) {
+            throw std::runtime_error("Handling of negative parameter values is not implemented!");
+          }
+
+          if (param == "offset") {
+            offset = value;
+          }
+          else if (param == "depth") {
+            depth = value;
+          }
+          else if (param == "distance") {
+            offset = value;
+            relativePattern = true;
+          }
+          else { // param == "within"
+            depth = value;
+            relativePattern = true;
+          }
+          std::cout << param << " = " << value << std::endl;
+        }
+      }
+      else {
+        throw std::runtime_error("Provided content pattern didn't match the standard pattern!");
+      }
+      std::stringstream ps;
+      ps << "(?" << thisModifiers << ":";
+      if ((offset > 0) || (depth > 0)) {
+        int end = (offset + depth) - contentString.length();
+        if (end != offset) {
+          ps << ".{" << offset << "," << end << "}";
+        }
+      }
+      else {
+        ps << ".*";
+      }
+      ps << contentString << ")";
+      thisPattern = ps.str();
     }
-    std::cout << *pattern << std::endl;
+    else { // a pcre pattern
+      std::cout << pString << std::endl;
+      if (pcrePattern.Consume(&pString, &thisPattern, &thisModifiers)) {
+        size_t index = thisModifiers.find('R');
+        if (index != std::string::npos) {
+          thisModifiers.replace(index, 1, "");
+          relativePattern = true;
+        }
+        thisPattern = "(?" + thisModifiers + ":" + thisPattern + ")";
+      }
+      else {
+        throw std::runtime_error("Provided pcre pattern didn't match the standard pattern!");
+      }
+    }
+    std::cout << thisPattern << std::endl;
+    if (relativePattern) {
+      (*(independentPatterns.rbegin())).append(thisPattern);
+    }
+    else {
+      independentPatterns.push_back(thisPattern);
+    }
   }
   return patternString;
 }
@@ -229,17 +300,21 @@ main (int argc, char** argv)
         pcrecpp::StringPiece contentString(thisContent);
         std::string pcreString, modifier, suffix;
         if (pcrePattern.Consume(&contentString, &pcreString, &modifier, &suffix)) {
-          if (!modifier.empty()) {
-            index = (separatorModifiers.find(modifier[0]))->second;
-            pcreString += suffix;
-            pcreString += contentString.as_string();
-          }
-          contentVectors[index].push_back(pcreString);
+          // Modifier was found in the string
+          // Set the index as per the modifier and remove the modifier
+          index = (separatorModifiers.find(modifier[0]))->second;
+          pcreString += suffix;
+          pcreString += contentString.as_string();
         }
+        else {
+          pcreString = thisContent; 
+        }
+        contentVectors[index].push_back(pcreString);
       }
       nextContent += optionString.as_string();
       optionString.set(nextContent.c_str());
     }
+
     std::map<size_t, std::string> patternMap;
     for (std::map<size_t, std::vector<std::string> >::const_iterator content = contentVectors.begin(); content != contentVectors.end(); ++content) {
       std::string patternString = getContentPattern(content->second);
