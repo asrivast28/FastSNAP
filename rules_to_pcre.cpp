@@ -91,13 +91,13 @@ parseCommandLineOptions (int argc, char** argv)
   po::notify(vm);    
   
   if ((argc == 1) || (vm.count("help") > 0)) {
-    std::cout << desc << std::endl;
+    std::cerr << desc << std::endl;
     throw po::error("");
   }
   if ((vm.count("file") > 0) && (vm.count("directory") > 0)) {
-    std::cout << "Files and directory can't be specified in combination." << std::endl;
-    std::cout << "Please use only one of the options." << std::endl;
-    std::cout << desc << std::endl;
+    std::cerr << "Files and directory can't be specified in combination." << std::endl;
+    std::cerr << "Please use only one of the options." << std::endl;
+    std::cerr << desc << std::endl;
     throw po::error("");
   }
   else if (vm.count("directory") == 1) {
@@ -139,8 +139,9 @@ parseRulesFiles (const std::vector<std::string>& rulesFiles)
         //std::cout << newOption << std::endl;
         std::string keyword;
         if (unsupportedPattern.PartialMatch(newOption, &keyword)) {
-          std::cout << keyword << " is not supported." << std::endl;
-          std::cout << "Skipping rule " << rule << std::endl;
+          std::cerr << std::endl;
+          std::cerr << "Keyword \"" << keyword << "\" is not supported. Skipping following rule." << std::endl;
+          std::cerr << rule << std::endl << std::endl;
         }
         else {
           allOptions.push_back(newOption);
@@ -159,23 +160,30 @@ parseRulesFiles (const std::vector<std::string>& rulesFiles)
 std::string
 getContentPattern (const std::vector<std::string>& patternVector)
 {
-  pcrecpp::RE contentPattern("content:\"(.*)\"");
+  pcrecpp::RE contentPattern("content:(!?)\"(.*)\"");
   pcrecpp::RE contentParamPattern("(offset|depth|distance|within):(\\d+)");
   pcrecpp::RE pcrePattern("pcre:\"\\/(.*)[\\/]?(\\w*)\"", pcrecpp::RE_Options(PCRE_UNGREEDY));
+  pcrecpp::RE escapePattern("(\\.|\\^|\\$|\\*|\\+|\\?|\\(|\\)|\\[|\\{|\\\\)");
 
-  std::string patternString;
+  std::string patternString = "^";
   std::vector<std::string> independentPatterns;
   for (std::vector<std::string>::const_iterator pattern = patternVector.begin(); pattern != patternVector.end(); ++pattern) {
     std::string thisPattern, thisModifiers;
+
     bool relativePattern = false;
+    bool negativePattern = false;
 
     pcrecpp::StringPiece pString(*pattern);
     if ((*pattern).compare(0, 7, "content") == 0) {
-      std::string contentString;
+      std::string negation, contentString;
       int offset = 0, depth = 0;
-      if (contentPattern.Consume(&pString, &contentString)) {
+      if (contentPattern.Consume(&pString, &negation, &contentString)) {
+        escapePattern.GlobalReplace("\\\\\\1", &contentString);
         if (pString.as_string().find("nocase;") != std::string::npos) {
           thisModifiers = "i";
+        }
+        if (!negation.empty()) {
+          negativePattern = true;
         }
         std::string param;
         int value;
@@ -198,14 +206,15 @@ getContentPattern (const std::vector<std::string>& patternVector)
             depth = value;
             relativePattern = true;
           }
-          std::cout << param << " = " << value << std::endl;
         }
       }
       else {
         throw std::runtime_error("Provided content pattern didn't match the standard pattern!");
       }
       std::stringstream ps;
-      ps << "(?" << thisModifiers << ":";
+      if (!thisModifiers.empty()) {
+        ps << "(?" << thisModifiers << ":";
+      }
       if ((offset > 0) || (depth > 0)) {
         int end = (offset + depth) - contentString.length();
         if (end != offset) {
@@ -215,31 +224,50 @@ getContentPattern (const std::vector<std::string>& patternVector)
       else {
         ps << ".*";
       }
-      ps << contentString << ")";
+      ps << contentString;
+      if (!thisModifiers.empty()) {
+        ps << ")";
+      }
       thisPattern = ps.str();
+      if (negativePattern) {
+        thisPattern = "(?!" + thisPattern + ")";
+      }
     }
     else { // a pcre pattern
-      std::cout << pString << std::endl;
       if (pcrePattern.Consume(&pString, &thisPattern, &thisModifiers)) {
         size_t index = thisModifiers.find('R');
         if (index != std::string::npos) {
           thisModifiers.replace(index, 1, "");
           relativePattern = true;
         }
-        thisPattern = "(?" + thisModifiers + ":" + thisPattern + ")";
+        if (!thisModifiers.empty()) {
+          thisPattern = "(?" + thisModifiers + ":" + thisPattern + ")";
+        }
+        if (!relativePattern) {
+          thisPattern = ".*" + thisPattern;
+        }
       }
       else {
         throw std::runtime_error("Provided pcre pattern didn't match the standard pattern!");
       }
     }
-    std::cout << thisPattern << std::endl;
-    if (relativePattern) {
+    //std::cout << thisPattern << std::endl;
+    if (relativePattern && (independentPatterns.size() > 0)) {
       (*(independentPatterns.rbegin())).append(thisPattern);
     }
     else {
       independentPatterns.push_back(thisPattern);
     }
   }
+
+  size_t numPatterns = independentPatterns.size();
+  if (numPatterns > 1) {
+    for (size_t p = 0; p < (numPatterns - 1); ++p) {
+      patternString += "(?=" + independentPatterns[p] + ")";
+    }
+  }
+  patternString += independentPatterns[numPatterns - 1];
+
   return patternString;
 }
 
@@ -254,7 +282,7 @@ main (int argc, char** argv)
     rulesFiles = parseCommandLineOptions(argc, argv);
   }
   catch (po::error& pe) {
-    std::cout << pe.what();
+    std::cerr << pe.what();
     return 1;
   }
   std::vector<std::string> allOptions = parseRulesFiles(rulesFiles);
@@ -317,10 +345,21 @@ main (int argc, char** argv)
 
     std::map<size_t, std::string> patternMap;
     for (std::map<size_t, std::vector<std::string> >::const_iterator content = contentVectors.begin(); content != contentVectors.end(); ++content) {
-      std::string patternString = getContentPattern(content->second);
-      patternMap.insert(std::make_pair(content->first, patternString));
+      try {
+        std::string separatorKeyword = "payload";
+        if (content->first > 0) {
+          separatorKeyword = (separatorKeywords.right.find(content->first))->second;
+        }
+        std::string patternString = getContentPattern(content->second);
+        std::cout << "Pattern to be searched in " << separatorKeyword << " for rule with SID " << sid << ": " << patternString << std::endl;
+        patternMap.insert(std::make_pair(content->first, patternString));
+      }
+      catch (std::runtime_error& e) {
+        std::cerr << std::endl;
+        std::cerr << "Getting pattern for rule with SID " << sid << " failed." << std::endl;
+        std::cerr << e.what() << std::endl << std::endl;
+      }
     }
-    std::cout << std::endl;
   }
   return 0;
 }
