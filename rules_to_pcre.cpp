@@ -20,6 +20,10 @@ static std::string unsupportedKeywords[] = {"byte_test", "byte_jump", "byte_extr
 // in the payload.
 static std::string separatorKeywords[] = {"http_client_body", "http_cookie", "http_raw_cookie", "http_header", "http_raw_header", "http_method",
                                           "http_uri", "http_raw_uri", "http_stat_code", "http_stat_msg", "pkt_data", "file_data"};
+// This is the array of raw versions of all the keywords defined in the above array.
+// Some have existing keywords while some don't.
+static std::string rawSeparatorKeywords[] = {"", "http_raw_cookie", "http_raw_cookie", "http_raw_header", "http_raw_header", "",
+                                             "http_raw_uri", "http_raw_uri", "", "", "", ""};
 // The following array is of same length as the keywords array above and each character corresponds to a Snort specific pcre modifier.
 // '\0' is used in places where no appropriate modifier exists.
 static char separatorModifiers[] = {'P', 'C', 'K', 'H', 'D', 'M',
@@ -31,9 +35,23 @@ static char separatorModifiers[] = {'P', 'C', 'K', 'H', 'D', 'M',
 std::vector<std::string>
 getUnsupportedKeywords ()
 {
-  static size_t unsupportedSize = sizeof(unsupportedKeywords) / sizeof(std::string);
+  size_t unsupportedSize = sizeof(unsupportedKeywords) / sizeof(std::string);
 
   return std::vector<std::string>(unsupportedKeywords, unsupportedKeywords + unsupportedSize);
+}
+
+std::map<std::string, std::string>
+getRawKeywordsMap ()
+{
+  size_t kwSize = sizeof(rawSeparatorKeywords) / sizeof(std::string);
+
+  std::map<std::string, std::string> rm;
+  for (size_t i = 0; i < kwSize; ++i) {
+    if (!rawSeparatorKeywords[i].empty()) {
+      rm.insert(std::make_pair(rawSeparatorKeywords[i], separatorKeywords[i]));
+    }
+  }
+  return rm;
 }
 
 /**
@@ -44,12 +62,17 @@ getUnsupportedKeywords ()
 boost::bimap<std::string, size_t>
 getSeparatorKeywordIndices ()
 {
-  static size_t kwSize = sizeof(separatorKeywords) / sizeof(std::string);
+  size_t kwSize = sizeof(separatorKeywords) / sizeof(std::string);
+  std::map<std::string, std::string> rkw(getRawKeywordsMap());
 
-  static boost::bimap<std::string, size_t> bm;
+  boost::bimap<std::string, size_t> bm;
+  size_t index = 1;
   for (size_t i = 0; i < kwSize; ++i) {
-    bm.insert(boost::bimap<std::string, size_t>::value_type(separatorKeywords[i], i+1));
+    if (rkw.find(separatorKeywords[i]) == rkw.end()) {
+      bm.insert(boost::bimap<std::string, size_t>::value_type(separatorKeywords[i], index++));
+    }
   }
+
   return bm; 
 }
 
@@ -65,7 +88,7 @@ getSeparatorModifierIndices ()
   static std::map<char, size_t> sm;
   for (size_t i = 0; i < modSize; ++i) {
     if (separatorModifiers[i] != '\0') {
-      sm.insert(std::make_pair(separatorModifiers[i], i+1));
+      sm.insert(std::make_pair(separatorModifiers[i], i + 1));
     }
   }
   return sm;
@@ -161,7 +184,7 @@ getContentPattern (const std::vector<std::string>& patternVector)
 {
   pcrecpp::RE contentPattern("content:(!?)\"(.*)\"");
   pcrecpp::RE contentParamPattern("(offset|depth|distance|within):(\\d+)");
-  pcrecpp::RE pcrePattern("pcre:\"\\/(.*)[\\/]?(\\w*)\"", pcrecpp::RE_Options(PCRE_UNGREEDY));
+  pcrecpp::RE pcrePattern("pcre:(!?)\"\\/(.*)[\\/]?(\\w*)\"", pcrecpp::RE_Options(PCRE_UNGREEDY));
   pcrecpp::RE escapePattern("(\\.|\\^|\\$|\\*|\\+|\\?|\\(|\\)|\\[|\\{|\\\\)");
   pcrecpp::RE pipePattern("(.*)\\|((?:[A-F\\d]{2} ?)*)\\|");
   pcrecpp::RE hexPattern("([\\dA-F]{2}) ?");
@@ -169,29 +192,25 @@ getContentPattern (const std::vector<std::string>& patternVector)
   std::string patternString = "^";
   std::vector<std::string> independentPatterns;
   for (std::vector<std::string>::const_iterator pattern = patternVector.begin(); pattern != patternVector.end(); ++pattern) {
-    std::string thisPattern, thisModifiers;
+    std::string negation, thisPattern, thisModifiers;
 
     bool relativePattern = false;
-    bool negativePattern = false;
 
     pcrecpp::StringPiece pString(*pattern);
     if ((*pattern).compare(0, 7, "content") == 0) {
-      std::string negation, contentString;
+      std::string contentString;
       int offset = 0, depth = 0;
       if (contentPattern.Consume(&pString, &negation, &contentString)) {
         escapePattern.GlobalReplace("\\\\\\1", &contentString);
         if (pString.as_string().find("nocase;") != std::string::npos) {
           thisModifiers = "i";
         }
-        if (!negation.empty()) {
-          negativePattern = true;
-        }
 
         pcrecpp::StringPiece contentSP(contentString.c_str());
-        std::string prefix, rawContent;
-        while (pipePattern.FindAndConsume(&contentSP, &prefix, &rawContent)) {
-          hexPattern.GlobalReplace("\\\\x\\1", &rawContent);
-          prefix += (rawContent + contentSP.as_string());
+        std::string prefix, isRaw;
+        while (pipePattern.FindAndConsume(&contentSP, &prefix, &isRaw)) {
+          hexPattern.GlobalReplace("\\\\x\\1", &isRaw);
+          prefix += (isRaw + contentSP.as_string());
           contentSP.set(prefix.c_str());
         }
         contentString = contentSP.as_string();
@@ -240,12 +259,9 @@ getContentPattern (const std::vector<std::string>& patternVector)
         ps << ")";
       }
       thisPattern = ps.str();
-      if (negativePattern) {
-        thisPattern = "(?!" + thisPattern + ")";
-      }
     }
     else { // a pcre pattern
-      if (pcrePattern.Consume(&pString, &thisPattern, &thisModifiers)) {
+      if (pcrePattern.Consume(&pString, &negation, &thisPattern, &thisModifiers)) {
         size_t index = thisModifiers.find('R');
         if (index != std::string::npos) {
           thisModifiers.replace(index, 1, "");
@@ -261,6 +277,9 @@ getContentPattern (const std::vector<std::string>& patternVector)
       else {
         throw std::runtime_error("Provided pcre pattern didn't match the standard pattern!");
       }
+    }
+    if (!negation.empty()) {
+      thisPattern = "(?!" + thisPattern + ")";
     }
     //std::cout << thisPattern << std::endl;
     if (relativePattern && (independentPatterns.size() > 0)) {
@@ -301,10 +320,10 @@ main (int argc, char** argv)
   pcrecpp::RE sidPattern("sid:(\\d+);");
   pcrecpp::RE contentPattern("((content|pcre):.*)(content:|pcre:|$)", pcrecpp::RE_Options(PCRE_UNGREEDY)); 
 
-  boost::bimap<std::string, size_t> separatorKeywords(getSeparatorKeywordIndices());
+  size_t kwSize = sizeof(separatorKeywords) / sizeof(std::string);
   std::string separatorString = "(";
-  for (boost::bimap<std::string, size_t>::left_const_iterator sk = separatorKeywords.left.begin(); sk != separatorKeywords.left.end(); ++sk) {
-    separatorString += (sk->first + "|");
+  for (size_t i = 0; i < kwSize; ++i) {
+    separatorString += (separatorKeywords[i] + "|");
   }
   *(separatorString.rbegin()) = ')';
   pcrecpp::RE keywordPattern(separatorString);
@@ -318,22 +337,34 @@ main (int argc, char** argv)
   separatorString = "(pcre:\"\\/.*\\/\\w*)" + separatorString + "(\\w*\")";
   pcrecpp::RE pcrePattern(separatorString);
 
+  std::map<std::string, std::ofstream*> fileMap;
   for (std::vector<std::string>::const_iterator option = allOptions.begin(); option != allOptions.end(); ++option) {
     size_t sid;
     if (!sidPattern.PartialMatch(*option, &sid)) {
       throw std::runtime_error("Encountered a rule with no SID!");
     }
     pcrecpp::StringPiece optionString(*option);
+    std::map<std::string, std::string> rawKeywordsMap(getRawKeywordsMap());
+    boost::bimap<std::string, size_t> separatorKeywordIndices(getSeparatorKeywordIndices());
     std::string thisContent, type, nextContent;
-    std::map<size_t, std::vector<std::string> > contentVectors;
+    std::map<std::pair<size_t, bool>, std::vector<std::string> > contentVectors;
     while (!optionString.empty() && contentPattern.FindAndConsume(&optionString, &thisContent, &type, &nextContent)) {
       size_t index = 0;
       if (type == "content") {
         std::string keyword;
+        bool isRaw = false;
         if (keywordPattern.PartialMatch(thisContent, &keyword)) {
-          index = (separatorKeywords.left.find(keyword))->second;
+          std::map<std::string, std::string>::const_iterator rk = rawKeywordsMap.find(keyword);
+          if (rk != rawKeywordsMap.end()) {
+            keyword = rk->second;
+            isRaw = true;
+          }
+          index = (separatorKeywordIndices.left.find(keyword))->second;
         }
-        contentVectors[index].push_back(thisContent);
+        if ((*option).find("rawbytes;") != std::string::npos) {
+          isRaw = true;
+        }
+        contentVectors[std::make_pair(index, isRaw)].push_back(thisContent);
       }
       else { // type == "pcre"
         pcrecpp::StringPiece contentString(thisContent);
@@ -348,22 +379,28 @@ main (int argc, char** argv)
         else {
           pcreString = thisContent; 
         }
-        contentVectors[index].push_back(pcreString);
+        contentVectors[std::make_pair(index, false)].push_back(pcreString);
       }
       nextContent += optionString.as_string();
       optionString.set(nextContent.c_str());
     }
 
-    std::map<size_t, std::string> patternMap;
-    for (std::map<size_t, std::vector<std::string> >::const_iterator content = contentVectors.begin(); content != contentVectors.end(); ++content) {
+    for (std::map<std::pair<size_t, bool>, std::vector<std::string> >::const_iterator content = contentVectors.begin(); content != contentVectors.end(); ++content) {
       try {
-        std::string separatorKeyword = "payload";
-        if (content->first > 0) {
-          separatorKeyword = (separatorKeywords.right.find(content->first))->second;
-        }
         std::string patternString = getContentPattern(content->second);
-        std::cout << "Pattern to be searched in " << separatorKeyword << " for rule with SID " << sid << ": " << patternString << std::endl;
-        patternMap.insert(std::make_pair(content->first, patternString));
+
+        std::string outputFile = "payload";
+        if ((content->first).first > 0) {
+          outputFile = (separatorKeywordIndices.right.find((content->first).first))->second;
+        }
+        if ((content->first).second) {
+          outputFile += "_raw";
+        }
+        if (fileMap.find(outputFile) == fileMap.end()) {
+          std::string fileName = outputFile + ".pcort";
+          fileMap[outputFile] = new std::ofstream(fileName.c_str(), std::ofstream::out);
+        }
+        *(fileMap[outputFile]) << sid << ": " << patternString << std::endl;
       }
       catch (std::runtime_error& e) {
         std::cerr << std::endl;
@@ -371,6 +408,10 @@ main (int argc, char** argv)
         std::cerr << e.what() << std::endl << std::endl;
       }
     }
+  }
+  for (std::map<std::string, std::ofstream*>::iterator f = fileMap.begin(); f != fileMap.end(); ++f) {
+    delete f->second;
+    f->second = 0;
   }
   return 0;
 }
