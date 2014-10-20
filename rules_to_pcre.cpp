@@ -153,7 +153,6 @@ parseRulesFiles (const std::vector<std::string>& rulesFiles)
 }
 
 /**
- * XXX: Work in progress.
  * This function returns a pattern for a given vector of pattern specifiers.
  * The pattern specifiers can be a combination of 'content's and 'pcre's.
  */
@@ -164,6 +163,8 @@ getContentPattern (const std::vector<std::string>& patternVector)
   pcrecpp::RE contentParamPattern("(offset|depth|distance|within):(\\d+)");
   pcrecpp::RE pcrePattern("pcre:\"\\/(.*)[\\/]?(\\w*)\"", pcrecpp::RE_Options(PCRE_UNGREEDY));
   pcrecpp::RE escapePattern("(\\.|\\^|\\$|\\*|\\+|\\?|\\(|\\)|\\[|\\{|\\\\)");
+  pcrecpp::RE pipePattern("(.*)\\|((?:[A-F\\d]{2} ?)*)\\|");
+  pcrecpp::RE hexPattern("([\\dA-F]{2}) ?");
 
   std::string patternString = "^";
   std::vector<std::string> independentPatterns;
@@ -185,6 +186,16 @@ getContentPattern (const std::vector<std::string>& patternVector)
         if (!negation.empty()) {
           negativePattern = true;
         }
+
+        pcrecpp::StringPiece contentSP(contentString.c_str());
+        std::string prefix, rawContent;
+        while (pipePattern.FindAndConsume(&contentSP, &prefix, &rawContent)) {
+          hexPattern.GlobalReplace("\\\\x\\1", &rawContent);
+          prefix += (rawContent + contentSP.as_string());
+          contentSP.set(prefix.c_str());
+        }
+        contentString = contentSP.as_string();
+
         std::string param;
         int value;
         while (contentParamPattern.FindAndConsume(&pString, &param, &value)) {
