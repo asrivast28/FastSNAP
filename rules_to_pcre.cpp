@@ -144,7 +144,7 @@ getContentPattern (const std::vector<std::string>& patternVector)
   pcrecpp::RE pipePattern("(.*)\\|((?:[A-F\\d]{2} ?)*)\\|");
   pcrecpp::RE hexPattern("([\\dA-F]{2}) ?");
 
-  std::string patternString = "^";
+  std::string patternString = "";
   std::vector<std::string> independentPatterns;
   for (std::vector<std::string>::const_iterator pattern = patternVector.begin(); pattern != patternVector.end(); ++pattern) {
     std::string negation, thisPattern, thisModifiers;
@@ -201,13 +201,21 @@ getContentPattern (const std::vector<std::string>& patternVector)
         ps << "(?" << thisModifiers << ":";
       }
       if ((offset > 0) || (depth > 0)) {
-        int end = (offset + depth) - contentString.length();
-        if (end != offset) {
-          ps << ".{" << offset << "," << end << "}";
+        if (depth < contentString.length()) {
+          throw std::runtime_error("Encountered depth/within less than content string length!");
         }
-      }
-      else {
-        ps << ".*";
+        int end = (offset + depth) - contentString.length();
+        if (!relativePattern) {
+          ps << "^";
+        }
+        ps << ".{" << offset;
+        if (end > offset) {
+          ps << "," << end;
+        }
+        ps << "}";
+        if (end < offset) {
+          ps << ".*";
+        }
       }
       ps << contentString;
       if (!thisModifiers.empty()) {
@@ -224,9 +232,6 @@ getContentPattern (const std::vector<std::string>& patternVector)
         }
         if (!thisModifiers.empty()) {
           thisPattern = "(?" + thisModifiers + ":" + thisPattern + ")";
-        }
-        if (!relativePattern) {
-          thisPattern = ".*" + thisPattern;
         }
       }
       else {
