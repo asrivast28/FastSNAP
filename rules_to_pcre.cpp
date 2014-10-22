@@ -1,3 +1,5 @@
+#include "parser_options.hpp"
+
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -7,12 +9,7 @@
 #include <pcrecpp.h>
 
 #include <boost/bimap.hpp>
-#include <boost/filesystem/operations.hpp>
-#include <boost/filesystem/fstream.hpp>
-#include <boost/program_options.hpp>
 
-namespace fs = boost::filesystem;
-namespace po = boost::program_options;
 
 // These are the keywords which are not supported. Rules which contain these are skipped.
 static std::string unsupportedKeywords[] = {"byte_test", "byte_jump", "byte_extract"};
@@ -92,48 +89,6 @@ getSeparatorModifierIndices ()
     }
   }
   return sm;
-}
-
-/**
- * This function parses command line arguments and returns a
- * list of rules files to be parsed.
- */
-std::vector<std::string>
-parseCommandLineOptions (int argc, char** argv)
-{
-  std::vector<std::string> rulesFiles;
-  po::options_description desc("Snort rules file parser options");
-  desc.add_options()
-    ("help,h", "Print this message.")
-    ("file,f", po::value<std::vector<std::string> >(&rulesFiles), "Snort rules file(s) to be parsed.")
-    ("directory,d", po::value<std::string>(), "Directory containing *.rules files.")
-    ;
-
-  po::variables_map vm;
-  po::store(po::parse_command_line(argc, argv, desc), vm);
-  po::notify(vm);    
-  
-  if ((argc == 1) || (vm.count("help") > 0)) {
-    std::cerr << desc << std::endl;
-    throw po::error("");
-  }
-  if ((vm.count("file") > 0) && (vm.count("directory") > 0)) {
-    std::cerr << "Files and directory can't be specified in combination." << std::endl;
-    std::cerr << "Please use only one of the options." << std::endl;
-    std::cerr << desc << std::endl;
-    throw po::error("");
-  }
-  else if (vm.count("directory") == 1) {
-    std::string directory = vm["directory"].as<std::string>();
-    if (fs::exists(directory)) {
-      for (fs::directory_iterator it(directory); it != fs::directory_iterator(); ++it) {
-        if (it->path().extension().string() == ".rules") {
-          rulesFiles.push_back(it->path().string());
-        }
-      }
-    }
-  }
-  return rulesFiles;
 }
 
 /**
@@ -307,15 +262,15 @@ getContentPattern (const std::vector<std::string>& patternVector)
 int
 main (int argc, char** argv)
 {
-  std::vector<std::string> rulesFiles;
+  ParserOptions po;
   try {
-    rulesFiles = parseCommandLineOptions(argc, argv);
+    po.parse(argc, argv);
   }
   catch (po::error& pe) {
     std::cerr << pe.what();
     return 1;
   }
-  std::vector<std::string> allOptions = parseRulesFiles(rulesFiles);
+  std::vector<std::string> allOptions = parseRulesFiles(po.rulesFiles());
 
   pcrecpp::RE sidPattern("sid:(\\d+);");
   pcrecpp::RE contentPattern("((content|pcre):.*)(content:|pcre:|$)", pcrecpp::RE_Options(PCRE_UNGREEDY)); 
@@ -396,11 +351,19 @@ main (int argc, char** argv)
         if ((content->first).second) {
           outputFile += "_raw";
         }
-        if (fileMap.find(outputFile) == fileMap.end()) {
-          std::string fileName = outputFile + ".pcort";
-          fileMap[outputFile] = new std::ofstream(fileName.c_str(), std::ofstream::out);
+
+        std::ostream* out = 0;
+        if (po.writeFiles()) {
+          if (fileMap.find(outputFile) == fileMap.end()) {
+            std::string fileName = outputFile + ".pcort";
+            fileMap[outputFile] = new std::ofstream(fileName.c_str(), std::ofstream::out);
+          }
+          out = fileMap[outputFile];
         }
-        *(fileMap[outputFile]) << sid << ": " << patternString << std::endl;
+        else {
+          out = &std::cout;
+        }
+        *(out) << sid << ": " << patternString << std::endl;
       }
       catch (std::runtime_error& e) {
         std::cerr << std::endl;
