@@ -174,7 +174,7 @@ getContentPattern (const std::vector<std::string>& patternVector)
         contentString = contentSP.as_string();
 
         std::string param;
-        size_t value;
+        int value;
         while (contentParamPattern.FindAndConsume(&pString, &param, &value)) {
           if (value < 0) {
             throw std::runtime_error("Handling of negative parameter values is not implemented!");
