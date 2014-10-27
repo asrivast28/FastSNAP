@@ -151,12 +151,15 @@ getContentPattern (const std::vector<std::string>& patternVector)
 
     bool relativePattern = false;
 
+    size_t escapePatternCount = 0;
+    size_t hexPatternCount = 0;
+
     pcrecpp::StringPiece pString(*pattern);
     if ((*pattern).compare(0, 7, "content") == 0) {
       std::string contentString;
-      int offset = 0, depth = 0;
+      size_t offset = 0, depth = std::string::npos;
       if (contentPattern.Consume(&pString, &negation, &contentString)) {
-        escapePattern.GlobalReplace("\\\\\\1", &contentString);
+        escapePatternCount = escapePattern.GlobalReplace("\\\\\\1", &contentString);
         if (pString.as_string().find("nocase;") != std::string::npos) {
           thisModifiers = "i";
         }
@@ -164,14 +167,14 @@ getContentPattern (const std::vector<std::string>& patternVector)
         pcrecpp::StringPiece contentSP(contentString.c_str());
         std::string prefix, isRaw;
         while (pipePattern.FindAndConsume(&contentSP, &prefix, &isRaw)) {
-          hexPattern.GlobalReplace("\\\\x\\1", &isRaw);
+          hexPatternCount += hexPattern.GlobalReplace("\\\\x\\1", &isRaw);
           prefix += (isRaw + contentSP.as_string());
           contentSP.set(prefix.c_str());
         }
         contentString = contentSP.as_string();
 
         std::string param;
-        int value;
+        size_t value;
         while (contentParamPattern.FindAndConsume(&pString, &param, &value)) {
           if (value < 0) {
             throw std::runtime_error("Handling of negative parameter values is not implemented!");
@@ -200,22 +203,28 @@ getContentPattern (const std::vector<std::string>& patternVector)
       if (!thisModifiers.empty()) {
         ps << "(?" << thisModifiers << ":";
       }
-      if ((offset > 0) || (depth > 0)) {
-        if (depth < contentString.length()) {
+      if ((offset > 0) || (depth < std::string::npos)) {
+        size_t contentSize = contentString.length() - (escapePatternCount * 1) - (hexPatternCount * 3);
+        if (depth < contentSize) {
           throw std::runtime_error("Encountered depth/within less than content string length!");
         }
-        int end = (offset + depth) - contentString.length();
         if (!relativePattern) {
           ps << "^";
         }
-        ps << ".{" << offset;
-        if (end > offset) {
-          ps << "," << end;
+        size_t end = (depth != std::string::npos) ? (offset + depth) - contentSize : 0;
+        if ((offset > 0) || (end > offset)) {
+          ps << ".{" << offset;
+          if (end > offset) {
+            ps << "," << end;
+          }
         }
         ps << "}";
-        if (end < offset) {
+        if (depth == std::string::npos) {
           ps << ".*";
         }
+      }
+      else if (relativePattern) {
+        ps << ".*";
       }
       ps << contentString;
       if (!thisModifiers.empty()) {
@@ -241,7 +250,6 @@ getContentPattern (const std::vector<std::string>& patternVector)
     if (!negation.empty()) {
       thisPattern = "(?!" + thisPattern + ")";
     }
-    //std::cout << thisPattern << std::endl;
     if (relativePattern && (independentPatterns.size() > 0)) {
       (*(independentPatterns.rbegin())).append(thisPattern);
     }
