@@ -140,11 +140,10 @@ getContentPattern (const std::vector<std::string>& patternVector)
   pcrecpp::RE contentPattern("content:(!?)\"(.*)\"");
   pcrecpp::RE contentParamPattern("(offset|depth|distance|within):(\\d+)");
   pcrecpp::RE pcrePattern("pcre:(!?)\"\\/(.*)[\\/]?(\\w*)\"", pcrecpp::RE_Options(PCRE_UNGREEDY));
-  pcrecpp::RE escapePattern("(\\.|\\^|\\$|\\*|\\+|\\?|\\(|\\)|\\[|\\{|\\\\)");
+  pcrecpp::RE escapePattern("(\\.|\\^|\\$|\\*|\\+|\\?|\\(|\\)|\\[|\\{|\\\\|\\/)");
   pcrecpp::RE pipePattern("(.*)\\|((?:[A-F\\d]{2} ?)*)\\|");
   pcrecpp::RE hexPattern("([\\dA-F]{2}) ?");
 
-  std::string patternString = "";
   std::vector<std::string> independentPatterns;
   for (std::vector<std::string>::const_iterator pattern = patternVector.begin(); pattern != patternVector.end(); ++pattern) {
     std::string negation, thisPattern, thisModifiers;
@@ -217,8 +216,8 @@ getContentPattern (const std::vector<std::string>& patternVector)
           if (end > offset) {
             ps << "," << end;
           }
+          ps << "}";
         }
-        ps << "}";
         if (depth == std::string::npos) {
           ps << ".*";
         }
@@ -258,11 +257,13 @@ getContentPattern (const std::vector<std::string>& patternVector)
     }
   }
 
+  std::string patternString;
   size_t numPatterns = independentPatterns.size();
   if (numPatterns > 1) {
     for (size_t p = 0; p < (numPatterns - 1); ++p) {
-      patternString += "(?=" + independentPatterns[p] + ")";
+      patternString += "(?=.*" + independentPatterns[p] + ")";
     }
+    patternString += ".*";
   }
   patternString += independentPatterns[numPatterns - 1];
 
