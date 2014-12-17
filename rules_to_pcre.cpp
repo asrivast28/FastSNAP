@@ -135,7 +135,7 @@ parseRulesFiles (const std::vector<std::string>& rulesFiles)
  * The pattern specifiers can be a combination of 'content's and 'pcre's.
  */
 std::string
-getContentPattern (const std::vector<std::string>& patternVector)
+getContentPattern (const std::vector<std::string>& patternVector, const int maxLookaheads)
 {
   pcrecpp::RE contentPattern("content:(!?)\"(.*)\"");
   pcrecpp::RE contentParamPattern("(offset|depth|distance|within):(\\d+)");
@@ -257,6 +257,10 @@ getContentPattern (const std::vector<std::string>& patternVector)
     }
   }
 
+  if ((maxLookaheads >= 0) && (independentPatterns.size() > (maxLookaheads + 1))) {
+    throw std::runtime_error("Number of lookaheads exceeded the maximum limit!");
+  }
+
   std::string patternString;
   size_t numPatterns = independentPatterns.size();
   if (numPatterns > 1) {
@@ -356,9 +360,9 @@ main (int argc, char** argv)
 
     for (std::map<std::pair<size_t, bool>, std::vector<std::string> >::const_iterator content = contentVectors.begin(); content != contentVectors.end(); ++content) {
       try {
-        std::string patternString = getContentPattern(content->second);
+        std::string patternString = getContentPattern(content->second, po.maxLookaheads());
 
-        std::string outputFile = "payload";
+        std::string outputFile = "general";
         if ((content->first).first > 0) {
           outputFile = (separatorKeywordIndices.right.find((content->first).first))->second;
         }
@@ -369,7 +373,7 @@ main (int argc, char** argv)
         std::ostream* out = 0;
         if (po.writeFiles()) {
           if (fileMap.find(outputFile) == fileMap.end()) {
-            std::string fileName = outputFile + ".pcort";
+            std::string fileName = outputFile + ".txt";
             fileMap[outputFile] = new std::ofstream(fileName.c_str(), std::ofstream::out);
           }
           out = fileMap[outputFile];
@@ -377,7 +381,7 @@ main (int argc, char** argv)
         else {
           out = &std::cout;
         }
-        *(out) << sid << ": " << patternString << std::endl;
+        *(out) << sid << ": /" << patternString << '/' << std::endl;
       }
       catch (std::runtime_error& e) {
         std::cerr << std::endl;

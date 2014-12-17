@@ -2,6 +2,8 @@
 #include <boost/filesystem/fstream.hpp>
 #include <boost/program_options.hpp>
 
+#include <iostream>
+
 namespace fs = boost::filesystem;
 namespace po = boost::program_options;
 
@@ -12,13 +14,14 @@ class ParserOptions {
 public:
   ParserOptions()
     : m_desc("Snort rules file parser options"),
-    m_rulesFiles(), m_writeFiles(false)
+    m_rulesFiles(), m_maxLookaheads(-1), m_writeFiles(false)
   {
     po::options_description desc;
     m_desc.add_options()
       ("help,h", "Print this message.")
       ("file,f", po::value<std::vector<std::string> >(&m_rulesFiles), "Snort rules file(s) to be parsed.")
       ("directory,d", po::value<std::string>(), "Directory containing *.rules files.")
+      ("maxlookaheads", po::value<int>(&m_maxLookaheads), "Maximum number of lookaheads in the generated PCRE patterns.")
       ("writefiles", po::value<bool>(&m_writeFiles)->zero_tokens(), "Flag for specifying if the output should be written to a set of files.")
       ;
   }
@@ -53,10 +56,13 @@ public:
 
   const std::vector<std::string>& rulesFiles() const { return m_rulesFiles; }
 
+  int maxLookaheads() const { return m_maxLookaheads; }
+
   bool writeFiles() const { return m_writeFiles; }
   
 private:
   po::options_description m_desc;
   std::vector<std::string> m_rulesFiles;
+  int m_maxLookaheads;
   bool m_writeFiles;
 };
