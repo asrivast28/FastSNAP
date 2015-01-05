@@ -14,7 +14,8 @@ class ParserOptions {
 public:
   ParserOptions()
     : m_desc("Snort rules file parser options"),
-    m_rulesFiles(), m_maxLookaheads(-1), m_writeFiles(false)
+    m_rulesFiles(), m_maxLookaheads(-1),
+    m_writeFiles(false), m_negations(false)
   {
     po::options_description desc;
     m_desc.add_options()
@@ -23,6 +24,7 @@ public:
       ("directory,d", po::value<std::string>(), "Directory containing *.rules files.")
       ("maxlookaheads", po::value<int>(&m_maxLookaheads), "Maximum number of lookaheads in the generated PCRE patterns.")
       ("writefiles", po::value<bool>(&m_writeFiles)->zero_tokens(), "Flag for specifying if the output should be written to a set of files.")
+      ("negations", po::value<bool>(&m_negations)->zero_tokens(), "Flag for specifying if negations should be handled.")
       ;
   }
 
@@ -59,10 +61,13 @@ public:
   int maxLookaheads() const { return m_maxLookaheads; }
 
   bool writeFiles() const { return m_writeFiles; }
+
+  bool handleNegations() const { return m_negations; }
   
 private:
   po::options_description m_desc;
   std::vector<std::string> m_rulesFiles;
   int m_maxLookaheads;
   bool m_writeFiles;
+  bool m_negations;
 };

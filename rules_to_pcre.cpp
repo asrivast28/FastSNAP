@@ -135,7 +135,7 @@ parseRulesFiles (const std::vector<std::string>& rulesFiles)
  * The pattern specifiers can be a combination of 'content's and 'pcre's.
  */
 std::string
-getContentPattern (const std::vector<std::string>& patternVector, const int maxLookaheads)
+getContentPattern (const std::vector<std::string>& patternVector, const int maxLookaheads, const bool handleNegations)
 {
   pcrecpp::RE contentPattern("content:(!?)\"(.*)\"");
   pcrecpp::RE contentParamPattern("(offset|depth|distance|within):(\\d+)");
@@ -247,6 +247,9 @@ getContentPattern (const std::vector<std::string>& patternVector, const int maxL
       }
     }
     if (!negation.empty()) {
+      if (!handleNegations) {
+        throw std::runtime_error("Can't handle negations!");
+      }
       thisPattern = "(?!" + thisPattern + ")";
     }
     if (relativePattern && (independentPatterns.size() > 0)) {
@@ -360,7 +363,7 @@ main (int argc, char** argv)
 
     for (std::map<std::pair<size_t, bool>, std::vector<std::string> >::const_iterator content = contentVectors.begin(); content != contentVectors.end(); ++content) {
       try {
-        std::string patternString = getContentPattern(content->second, po.maxLookaheads());
+        std::string patternString = getContentPattern(content->second, po.maxLookaheads(), po.handleNegations());
 
         std::string outputFile = "general";
         if ((content->first).first > 0) {
