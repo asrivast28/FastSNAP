@@ -131,6 +131,38 @@ parseRulesFiles (const std::vector<std::string>& rulesFiles)
 }
 
 /**
+ * This function combines given independent patterns into a single pattern string.
+ * It also rearranges patterns for minimizing start of stream anchors in lookahead assertions.
+ */
+std::string
+combineIndependentPatterns(std::vector<std::string>& independentPatterns)
+{
+  std::string patternString;
+  size_t numPatterns = independentPatterns.size();
+  if (numPatterns > 1) {
+    for (size_t p = 0; p < (numPatterns - 1); ++p) {
+      if (independentPatterns[p][0] == '^') {
+        if (independentPatterns[numPatterns - 1][0] != '^') {
+          std::string temp = independentPatterns[numPatterns - 1];
+          independentPatterns[numPatterns - 1] = independentPatterns[p];
+          independentPatterns[p] = temp;
+        }
+      }
+      if (independentPatterns[p][0] != '^') {
+        independentPatterns[p] = ".*" + independentPatterns[p];
+      }
+      patternString += "(?=" + independentPatterns[p] + ")";
+    }
+    if (independentPatterns[numPatterns - 1][0] != '^') {
+      patternString += ".*";
+    }
+  }
+  patternString += independentPatterns[numPatterns - 1];
+
+  return patternString;
+}
+
+/**
  * This function returns a pattern for a given vector of pattern specifiers.
  * The pattern specifiers can be a combination of 'content's and 'pcre's.
  */
@@ -264,22 +296,7 @@ getContentPattern (const std::vector<std::string>& patternVector, const int maxL
     throw std::runtime_error("Number of lookaheads exceeded the maximum limit!");
   }
 
-  std::string patternString;
-  size_t numPatterns = independentPatterns.size();
-  if (numPatterns > 1) {
-    for (size_t p = 0; p < (numPatterns - 1); ++p) {
-      if (independentPatterns[p][0] != '^') {
-        independentPatterns[p] = ".*" + independentPatterns[p];
-      }
-      patternString += "(?=" + independentPatterns[p] + ")";
-    }
-    if (independentPatterns[numPatterns - 1][0] != '^') {
-      patternString += ".*";
-    }
-  }
-  patternString += independentPatterns[numPatterns - 1];
-
-  return patternString;
+  return combineIndependentPatterns(independentPatterns);
 }
 
 /**
