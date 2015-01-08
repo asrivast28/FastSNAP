@@ -268,9 +268,14 @@ getContentPattern (const std::vector<std::string>& patternVector, const int maxL
   size_t numPatterns = independentPatterns.size();
   if (numPatterns > 1) {
     for (size_t p = 0; p < (numPatterns - 1); ++p) {
-      patternString += "(?=.*" + independentPatterns[p] + ")";
+      if (independentPatterns[p][0] != '^') {
+        independentPatterns[p] = ".*" + independentPatterns[p];
+      }
+      patternString += "(?=" + independentPatterns[p] + ")";
     }
-    patternString += ".*";
+    if (independentPatterns[numPatterns - 1][0] != '^') {
+      patternString += ".*";
+    }
   }
   patternString += independentPatterns[numPatterns - 1];
 
