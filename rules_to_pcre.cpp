@@ -70,7 +70,7 @@ getSeparatorKeywordIndices ()
     }
   }
 
-  return bm; 
+  return bm;
 }
 
 /**
@@ -109,11 +109,13 @@ parseRulesFiles (const std::vector<std::string>& rulesFiles)
   *(unsupportedString.rbegin()) = ')';
   pcrecpp::RE unsupportedPattern(unsupportedString);
 
+  unsigned numPatterns = 0;
   for (std::vector<std::string>::const_iterator rf = rulesFiles.begin(); rf != rulesFiles.end(); ++rf) {
     std::ifstream rfstream((*rf).c_str());
     for (std::string rule; std::getline(rfstream, rule); ) {
       std::string newOption;
       if ((rule[0] != '#') && optionPattern.PartialMatch(rule, &newOption)) {
+        ++numPatterns;
         //std::cout << newOption << std::endl;
         std::string keyword;
         if (unsupportedPattern.PartialMatch(newOption, &keyword)) {
@@ -162,6 +164,8 @@ combineIndependentPatterns(std::vector<std::string>& independentPatterns)
   return patternString;
 }
 
+static unsigned negations = 0;
+static unsigned lookaheads = 0;
 /**
  * This function returns a pattern for a given vector of pattern specifiers.
  * The pattern specifiers can be a combination of 'content's and 'pcre's.
@@ -173,9 +177,11 @@ getContentPattern (const std::vector<std::string>& patternVector, const int maxL
   pcrecpp::RE contentParamPattern("(offset|depth|distance|within):(\\d+)");
   pcrecpp::RE pcrePattern("pcre:(!?)\"\\/(.*)[\\/]?(\\w*)\"", pcrecpp::RE_Options(PCRE_UNGREEDY));
   pcrecpp::RE escapePattern("(\\.|\\^|\\$|\\*|\\+|\\?|\\(|\\)|\\[|\\{|\\\\|\\/)");
+  pcrecpp::RE lookaheadPattern("(\\(\\?=.*\\))");
   pcrecpp::RE pipePattern("(.*)\\|((?:[A-F\\d]{2} ?)*)\\|");
   pcrecpp::RE hexPattern("([\\dA-F]{2}) ?");
 
+  int numLookaheads = 0;
   std::vector<std::string> independentPatterns;
   for (std::vector<std::string>::const_iterator pattern = patternVector.begin(); pattern != patternVector.end(); ++pattern) {
     std::string negation, thisPattern, thisModifiers;
@@ -270,6 +276,8 @@ getContentPattern (const std::vector<std::string>& patternVector, const int maxL
           thisModifiers.replace(index, 1, "");
           relativePattern = true;
         }
+        std::string tempPattern(thisPattern);
+        numLookaheads += lookaheadPattern.GlobalReplace("x", &tempPattern);
         if (!thisModifiers.empty()) {
           thisPattern = "(?" + thisModifiers + ":" + thisPattern + ")";
         }
@@ -280,6 +288,7 @@ getContentPattern (const std::vector<std::string>& patternVector, const int maxL
     }
     if (!negation.empty()) {
       if (!handleNegations) {
+        ++negations;
         throw std::runtime_error("Can't handle negations!");
       }
       thisPattern = "(?!" + thisPattern + ")";
@@ -292,7 +301,11 @@ getContentPattern (const std::vector<std::string>& patternVector, const int maxL
     }
   }
 
-  if ((maxLookaheads >= 0) && (independentPatterns.size() > (maxLookaheads + 1))) {
+  // if numLookaheads > 0 and number of independent patterns > 0
+  // then this can lead to nested lookaheads
+  numLookaheads += independentPatterns.size();
+  if ((maxLookaheads >= 0) && (numLookaheads > (maxLookaheads + 1))) {
+    ++lookaheads;
     throw std::runtime_error("Number of lookaheads exceeded the maximum limit!");
   }
 
@@ -316,7 +329,7 @@ main (int argc, char** argv)
   std::vector<std::string> allOptions = parseRulesFiles(po.rulesFiles());
 
   pcrecpp::RE sidPattern("sid:(\\d+);");
-  pcrecpp::RE contentPattern("((content|pcre):.*)(content:|pcre:|$)", pcrecpp::RE_Options(PCRE_UNGREEDY)); 
+  pcrecpp::RE contentPattern("((content|pcre):.*)(content:|pcre:|$)", pcrecpp::RE_Options(PCRE_UNGREEDY));
 
   size_t kwSize = sizeof(separatorKeywords) / sizeof(std::string);
   std::string separatorString = "(";
@@ -336,6 +349,7 @@ main (int argc, char** argv)
   pcrecpp::RE pcrePattern(separatorString);
 
   std::map<std::string, std::ofstream*> fileMap;
+  unsigned handled = 0;
   for (std::vector<std::string>::const_iterator option = allOptions.begin(); option != allOptions.end(); ++option) {
     size_t sid;
     if (!sidPattern.PartialMatch(*option, &sid)) {
@@ -375,7 +389,7 @@ main (int argc, char** argv)
           pcreString += contentString.as_string();
         }
         else {
-          pcreString = thisContent; 
+          pcreString = thisContent;
         }
         contentVectors[std::make_pair(index, false)].push_back(pcreString);
       }
@@ -383,41 +397,56 @@ main (int argc, char** argv)
       optionString.set(nextContent.c_str());
     }
 
+    bool isHandled = true;
+    std::map<std::pair<size_t, bool>, std::string> convertedStrings;
     for (std::map<std::pair<size_t, bool>, std::vector<std::string> >::const_iterator content = contentVectors.begin(); content != contentVectors.end(); ++content) {
       try {
         std::string patternString = getContentPattern(content->second, po.maxLookaheads(), po.handleNegations());
-
-        std::string outputFile = "general";
-        if ((content->first).first > 0) {
-          outputFile = (separatorKeywordIndices.right.find((content->first).first))->second;
-        }
-        if ((content->first).second) {
-          outputFile += "_raw";
-        }
-
-        std::ostream* out = 0;
-        if (po.writeFiles()) {
-          if (fileMap.find(outputFile) == fileMap.end()) {
-            std::string fileName = outputFile + ".txt";
-            fileMap[outputFile] = new std::ofstream(fileName.c_str(), std::ofstream::out);
-          }
-          out = fileMap[outputFile];
-        }
-        else {
-          out = &std::cout;
-        }
-        *(out) << sid << ": /" << patternString << '/' << std::endl;
+        convertedStrings.insert(std::make_pair(content->first, patternString));
       }
       catch (std::runtime_error& e) {
         std::cerr << std::endl;
         std::cerr << "Getting pattern for rule with SID " << sid << " failed." << std::endl;
         std::cerr << e.what() << std::endl << std::endl;
+        isHandled = false;
+        break;
       }
+    }
+    if (!isHandled) {
+      continue;
+    }
+    ++handled;
+    for (std::map<std::pair<size_t, bool>, std::string>::const_iterator content = convertedStrings.begin(); content != convertedStrings.end(); ++content) {
+      std::string outputFile = "general";
+      if ((content->first).first > 0) {
+        outputFile = (separatorKeywordIndices.right.find((content->first).first))->second;
+      }
+      if ((content->first).second) {
+        outputFile += "_raw";
+      }
+
+      std::ostream* out = 0;
+      if (po.writeFiles()) {
+        if (fileMap.find(outputFile) == fileMap.end()) {
+          std::string fileName = outputFile + ".txt";
+          fileMap[outputFile] = new std::ofstream(fileName.c_str(), std::ofstream::out);
+        }
+        out = fileMap[outputFile];
+      }
+      else {
+        out = &std::cout;
+      }
+      *(out) << sid << ": /" << content->second << '/' << std::endl;
     }
   }
   for (std::map<std::string, std::ofstream*>::iterator f = fileMap.begin(); f != fileMap.end(); ++f) {
     delete f->second;
     f->second = 0;
   }
+  std::cout << std::endl;
+  std::cout << allOptions.size() << std::endl;
+  std::cout << handled << std::endl;
+  std::cout << negations << std::endl;
+  std::cout << lookaheads << std::endl;
   return 0;
 }
