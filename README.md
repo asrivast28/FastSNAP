@@ -12,5 +12,5 @@ Execution
 =========
 The executable can be executed as:    .
 ```
-/fastsnap [options]
+./fastsnap [options]
 ```
