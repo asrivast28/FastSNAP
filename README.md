@@ -1,9 +1,14 @@
-Building
-========
-All the code is contained in a file named "pcre\_snort.cpp".
-"boost" and "pcrecpp" library for building this program.
-A Makefile is provided for building the program.
+About
+=====
+This repository contains code for converting Snort rules into their
+ANML equivalent, and to optionally compile the generated ANML.
 
-Implementation
-==============
-Don't have much to say as of now. Keeping fingers crossed.
+Requirements
+============
+The implementation requires Python 2.7 for execution.
+It further needs Micron AP SDK for conversion to ANML and compilation.
+
+Execution
+=========
+The executable can be executed as
+    ./fastsnap [options]
