@@ -33,8 +33,7 @@ if __name__ == '__main__':
     t = time.time()
     converter = RulesConverter(args.independent, args.negations, args.compile)
     # first determine which rules are not unsupported
-    supported, unsupported = converter.convert(args.rules)
-    print len(supported), len(unsupported)
+    unsupported = converter.convert(args.rules)
     # now reset the converter
     converter.reset()
     # disable the error messages as they have been already output
@@ -42,8 +41,10 @@ if __name__ == '__main__':
     # convert again, only supported rules this time
     converter.convert(args.rules, unsupported)
     t = time.time() - t
-    print t
+    print '\nTotal time taken in converting the rules:', t
+
     # export them as ANML
     t = time.time()
     converter.export('test_anml', args.compile)
     t = time.time() - t
+    print 'Total time taken in exporting:', t

@@ -8,7 +8,7 @@ from anmlrules import AnmlRules, AnmlException
 
 class RulesConverter(object):
     """
-    Class for converting Snort rules to ANML. 
+    Class for converting Snort rules to ANML.
     """
     # list of Snort keywords that are not supported
     _unsupportedKeywords = (
@@ -55,7 +55,7 @@ class RulesConverter(object):
 
     @classmethod
     def enableErrorMessages(cls):
-        cls._printMessages = True 
+        cls._printMessages = True
 
     @classmethod
     def disableErrorMessages(cls):
@@ -66,6 +66,14 @@ class RulesConverter(object):
         if cls._printMessages:
             stderr.write(message)
             stderr.flush()
+
+    @classmethod
+    def _print_statistics(cls, totalRules, patternRules, supportedRules, convertedRules):
+        if cls._printMessages:
+            print 'Total number of rules:', totalRules
+            print 'Number of rules with pattern matching keywords:', patternRules
+            print 'Number of supported rules:', supportedRules
+            print 'Number of converted rules:', convertedRules
 
     @classmethod
     def _get_modifier_keyword(cls, modifier):
@@ -81,40 +89,56 @@ class RulesConverter(object):
         return cls._modifierKeywordsMap[modifier]
 
     @classmethod
-    def _get_file_options(cls, rulesFile):
+    def _get_pattern_matching_rules(cls, rulesFile):
         """
-        Extracts all the supported options from the given rules file.
-        The argument should be a file object.
+        Extracts all the rules with pattern matching keywords.
         """
-        fileOptions = []
+        ruleCount = 0
+        fileRules = []
         for rule in rulesFile:
             rule = rule.strip()
             if not rule or rule[0] == '#':
                 # skip commented rules, denoted by '#'
                 # also skip empty lines
                 continue
+            ruleCount += 1
             matched = cls._optionPattern.search(rule)
-            if matched is not None:
-                newOption = matched.group('options')
-                matched = cls._unsupportedPattern.search(newOption)
-                if matched is not None:
-                    cls._error_message('Skipping the following rule as the keyword "%s" is not supported.\n%s\n\n'%(matched.group('unsupported'), rule))
-                else:
-                    fileOptions.append(newOption)
-            else:
+            if matched is None:
                 cls._error_message("Skipping the following rule as it doesn't have any pattern matching keywords.\n%s\n\n"%(rule))
-        return fileOptions
+            else:
+                fileRules.append(rule)
+        return fileRules, ruleCount
 
     @classmethod
-    def _get_all_options(cls, rulesFiles):
+    def _get_supported_rules(cls, allRules):
         """
-        Gets all the supported options from the rules file(s).
+        Filters all the rules with unsupported keywords.
         """
-        allOptions = []
+        supportedRules = []
+        for rule in allRules:
+            matched = cls._unsupportedPattern.search(rule)
+            if matched is not None:
+                cls._error_message('Skipping the following rule as the keyword "%s" is not supported.\n%s\n\n'%(matched.group('unsupported'), rule))
+            else:
+                supportedRules.append(rule)
+        return supportedRules
+
+    @classmethod
+    def _get_all_rules(cls, rulesFiles):
+        """
+        Gets all the supported rules from the rules file(s).
+        """
+        totalRuleCount = 0
+        patternRuleCount = 0
+        supportedRules = []
         for f in rulesFiles:
             with open(f, 'rb') as rulesFile:
-                allOptions.extend(cls._get_file_options(rulesFile))
-        return allOptions
+                fileRules, fileRuleCount = cls._get_pattern_matching_rules(rulesFile)
+                totalRuleCount += fileRuleCount
+                patternRuleCount += len(fileRules)
+                fileSupportedRules = cls._get_supported_rules(fileRules)
+                supportedRules.extend(fileSupportedRules)
+        return supportedRules, totalRuleCount, patternRuleCount
 
     def __init__(self, independent, negations, compile):
         """
@@ -152,7 +176,7 @@ class RulesConverter(object):
 
     def _get_independent_patterns(self, patterns):
         """
-        Extracts indepdent patterns from given content/pcre for a rule. 
+        Extracts indepdent patterns from given content/pcre for a rule.
         """
         independentPatterns = []
         numLookaheads = 0
@@ -237,7 +261,7 @@ class RulesConverter(object):
             if relative and len(independentPatterns) > 0:
                 if negation is not independentPatterns[-1][1]:
                     #print independentPatterns, thisPattern
-                    raise RuntimeError, 'Unable to handle negations of this kind!' 
+                    raise RuntimeError, 'Unable to handle negations of this kind!'
                 independentPatterns[-1][0] = independentPatterns[-1][0] + thisPattern
             else:
                 independentPatterns.append([thisPattern, negation])
@@ -251,13 +275,15 @@ class RulesConverter(object):
 
     def convert(self, rulesFiles, unsupported = set()):
         """
-        Convert all the rules in given rules files to the corresponding ANML or PCRE. 
+        Convert all the rules in given rules files to the corresponding ANML or PCRE.
         """
         outputFiles = {}
         sids = set()
 
-        for option in self._get_all_options(rulesFiles):
-            matched = self._sidPattern.search(option)
+        allRules, totalRuleCount, patternRuleCount = self._get_all_rules(rulesFiles)
+
+        for rule in allRules:
+            matched = self._sidPattern.search(rule)
             if matched is None:
                 raise RuntimeError, "Encountered a rule with no SID!"
             sid = int(matched.group('sid'))
@@ -265,7 +291,7 @@ class RulesConverter(object):
             if sid in unsupported:
                 continue
             contentVectors = defaultdict(list)
-            for pattern in self._genericPattern.finditer(option):
+            for pattern in self._genericPattern.finditer(rule):
                 keyword = 'general'
                 raw = False
                 thisContent = pattern.group('content')
@@ -280,7 +306,7 @@ class RulesConverter(object):
                         contentString = self._genericPcrePattern.sub('', thisContent, count = 1)
                         thisContent = pcreString + contentString
                         keyword = self._get_modifier_keyword(matched.group('modifier'))
-                raw = option.find('rawbytes;') != -1
+                raw = rule.find('rawbytes;') != -1
                 if keyword in self._keywordsMap and self._keywordsMap[keyword][0]:
                     raw = raw or bool(self._keywordsMap[keyword][0])
                     keyword = self._keywordsMap[keyword][0]
@@ -314,7 +340,8 @@ class RulesConverter(object):
                     #outputFiles[keyword].write(writeString + '\n')
                 #else:
                     #print writeString
-        return sids - unsupported, unsupported
+        self._print_statistics(totalRuleCount, patternRuleCount, len(allRules), len(sids - unsupported))
+        return unsupported
 
     def export(self, directory, compile):
         if self._compile:

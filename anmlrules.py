@@ -17,7 +17,7 @@ class AnmlRules(object):
 
     def _next_boolean_id(self):
         self._counter += 1
-        return '__boolean_%d__'%(self._counter) 
+        return '__boolean_%d__'%(self._counter)
 
     def _latch_with_boolean(self, network, element, boolean):
         ste = network.AddSTE('*')
@@ -54,13 +54,13 @@ class AnmlRules(object):
                 boolean = network.AddBoolean(mode = ap.BooleanMode.OR, anmlId = self._next_boolean_id())
                 self._latch_with_boolean(network, regex, boolean)
                 elements.append(boolean)
-        return elements 
+        return elements
 
     def add(self, keyword, sid, patterns):
         if keyword not in self._anmlNetworks:
             anml = ap.Anml()
             network = anml.CreateAutomataNetwork(anmlId = keyword)
-            self._anmlNetworks[keyword] = (anml, network) 
+            self._anmlNetworks[keyword] = (anml, network)
         if len(patterns) == 1:
             pattern, negation = patterns[0]
             self._add_single_pattern(self._anmlNetworks[keyword][1], pattern, negation, reportCode = sid)
@@ -69,7 +69,7 @@ class AnmlRules(object):
             elements = self._add_multiple_patterns(network, patterns)
             boolean = network.AddBoolean(reportCode = sid, match = True, eod = True, anmlId = self._next_boolean_id())
             for element in elements:
-                network.AddAnmlEdge(element, boolean, ap.AnmlDefs.PORT_IN) 
+                network.AddAnmlEdge(element, boolean, ap.AnmlDefs.PORT_IN)
 
     def export(self, directory):
         for keyword, anmlNetwork in self._anmlNetworks.iteritems():
