@@ -77,8 +77,8 @@ class AnmlRules(object):
 
     def compile(self, directory):
         for keyword, anmlNetwork in self._anmlNetworks.iteritems():
-            if keyword != "general":
-                continue
+            #if keyword != "general":
+                #continue
             print 'Compiling %s\n'%(keyword)
             try:
                 automata, emap = anmlNetwork[0].CompileAnml(options = ap.CompileDefs.AP_OPT_SHOW_DEBUG)

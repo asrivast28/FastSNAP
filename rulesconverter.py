@@ -140,18 +140,21 @@ class RulesConverter(object):
                 supportedRules.extend(fileSupportedRules)
         return supportedRules, totalRuleCount, patternRuleCount
 
-    def __init__(self, independent, negations, compile):
+    def __init__(self, independent, negations, maxPatterns, compile):
         """
         Constructor. Stores some of the program options.
         """
         self._independent = independent
         self._negations = negations
+        self._maxPatterns = maxPatterns
         self._compile = compile
 
         self._sids = set()
         self._unsupported = set()
 
         self._anml = AnmlRules()
+
+        self._patternCount = defaultdict(int)
 
     def _combine_independent_patterns(self, independentPatterns):
         """
@@ -267,10 +270,24 @@ class RulesConverter(object):
                 independentPatterns.append([thisPattern, negation])
         return [('/%s/'%(pattern), negation) for pattern, negation in independentPatterns]
 
+    def _get_bucket_keyword(self, bucket, patterns):
+        base = bucket[0] + '_raw' if bucket[1] else bucket[0]
+        if self._patternCount[base] + len(patterns) > self._maxPatterns:
+            counter = 1
+            keyword = '%s_%d'%(base, counter) 
+            while self._patternCount[keyword] + len(patterns) > self._maxPatterns:
+                counter += 1
+                keyword = '%s_%d'%(base, counter) 
+        else:
+            keyword = base
+        self._patternCount[keyword] += len(patterns)
+        return keyword
+
     def reset(self):
         """
         Reset ANML rules.
         """
+        self._patternCount.clear()
         self._anml.reset()
 
     def convert(self, rulesFiles, unsupported = set()):
@@ -281,6 +298,7 @@ class RulesConverter(object):
         sids = set()
 
         allRules, totalRuleCount, patternRuleCount = self._get_all_rules(rulesFiles)
+        patternCount = defaultdict(int)
 
         for rule in allRules:
             matched = self._sidPattern.search(rule)
@@ -326,8 +344,8 @@ class RulesConverter(object):
                     break
             if not handled:
                 continue
-            for keyword, patterns in convertedStrings.iteritems():
-                keyword = keyword[0] + '_raw' if keyword[1] else keyword[0]
+            for bucket, patterns in convertedStrings.iteritems():
+                keyword = self._get_bucket_keyword(bucket, patterns)
                 try:
                     self._anml.add(keyword, sid, patterns)
                 except AnmlException, e:
@@ -340,7 +358,11 @@ class RulesConverter(object):
                     #outputFiles[keyword].write(writeString + '\n')
                 #else:
                     #print writeString
+            if handled:
+                for keyword, patterns in convertedStrings.iteritems():
+                    keyword = keyword[0] + '_raw' if keyword[1] else keyword[0]
         self._print_statistics(totalRuleCount, patternRuleCount, len(allRules), len(sids - unsupported))
+        #print self._patternCount
         return unsupported
 
     def export(self, directory, compile):
