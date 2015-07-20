@@ -20,8 +20,8 @@ if __name__ == '__main__':
         return allFiles
 
     parser = ArgumentParser()
-    parser.add_argument('--rules', help = 'Specify the directory/file from which rules are to be extracted.',
-                        required = True, type = RulesPath)
+    parser.add_argument('rules', help = 'Specify the directory/file from which rules are to be extracted.',
+                        type = RulesPath)
     parser.add_argument('--independent', help = 'Flag for specifying if independent patterns should be handled.',
                         action = 'store_true')
     parser.add_argument('--negations', help = 'Flag for specifying if negations should be handled.',
