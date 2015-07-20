@@ -272,10 +272,10 @@ class RulesConverter(object):
 
     def _get_bucket_keyword(self, bucket, patterns):
         base = bucket[0] + '_raw' if bucket[1] else bucket[0]
-        if self._patternCount[base] + len(patterns) > self._maxPatterns:
+        if self._patternCount[base] > 0 and self._patternCount[base] + len(patterns) > self._maxPatterns:
             counter = 1
             keyword = '%s_%d'%(base, counter) 
-            while self._patternCount[keyword] + len(patterns) > self._maxPatterns:
+            while self._patternCount[keyword] > 0 and self._patternCount[keyword] + len(patterns) > self._maxPatterns:
                 counter += 1
                 keyword = '%s_%d'%(base, counter) 
         else:
