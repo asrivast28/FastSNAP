@@ -1,6 +1,7 @@
 import micronap.sdk as ap
 import exceptions
 import os
+import re
 import sys
 
 
@@ -9,6 +10,8 @@ class AnmlException(exceptions.Exception):
 
 class AnmlRules(object):
     def __init__(self):
+        self._orAnchorPattern = re.compile(r'^\/(?P<before>.*)(?P<start>\(|\(.*?\|)\$(?P<end>\|.*?\)|\))(?P<after>(?:\)*))\/$')
+        self._anchorPattern = re.compile(r'^\/(?P<open>(?:\(\?\w*:)?)(?P<start>\^?)(?P<pattern>.*?)(?<!\\)(?P<end>\$?)(?P<close>(?:\)*))\/$')
         self.reset()
 
     def reset(self):
@@ -27,28 +30,40 @@ class AnmlRules(object):
         network.AddAnmlEdge(ste, ste, ap.AnmlDefs.PORT_IN)
 
     def _add_single_pattern(self, network, pattern, negation, reportCode = None):
-        kwargs = {'startType' : ap.AnmlDefs.ALL_INPUT}
-        if not negation and reportCode is not None:
+        matched = self._anchorPattern.match(pattern)
+        kwargs = {'startType' : ap.AnmlDefs.START_OF_DATA if matched.group('start') else ap.AnmlDefs.ALL_INPUT}
+        if not negation and reportCode is not None and not matched.group('end'):
             kwargs.update({'reportCode' : reportCode, 'match' : True})
         try:
+            pattern = '/' + matched.group('open') + matched.group('pattern') + matched.group('close') + '/'
             regex = network.AddRegex(pattern, **kwargs)
         except ap.ApError, e:
             raise AnmlException, '\nAdding pattern "%s" failed.\n%s\n'%(pattern, str(e))
+        if matched.group('end') and reportCode is not None:
+            kwargs = {'mode' : ap.BooleanMode.OR, 'anmlId' : self._next_boolean_id(), 'eod' : True}
+            if reportCode is not None:
+                kwargs.update({'reportCode' : reportCode, 'match' : True})
+            boolean = network.AddBoolean(**kwargs)
+            network.AddAnmlEdge(regex, boolean, ap.AnmlDefs.PORT_IN)
+            return (boolean, False)
         if not negation:
-           return regex
+            if matched.group('end'):
+                return (regex, reportCode is not None)
+            else:
+                return (regex, True)
         else:
             kwargs = {'mode' : ap.BooleanMode.NOR, 'anmlId' : self._next_boolean_id()}
             if reportCode is not None:
                 kwargs.update({'reportCode' : reportCode, 'match' : True, 'eod' : True})
             boolean = network.AddBoolean(**kwargs)
             self._latch_with_boolean(network, regex, boolean)
-            return boolean
+            return (boolean, True)
 
     def _add_multiple_patterns(self, network, patterns):
         elements = []
         for pattern, negation in patterns:
-            regex = self._add_single_pattern(network, pattern, negation)
-            if negation:
+            regex, latch = self._add_single_pattern(network, pattern, negation)
+            if negation or not latch:
                 elements.append(regex)
             else:
                 boolean = network.AddBoolean(mode = ap.BooleanMode.OR, anmlId = self._next_boolean_id())
@@ -56,20 +71,54 @@ class AnmlRules(object):
                 elements.append(boolean)
         return elements
 
+    def _match_or_anchor(self, pattern):
+        matched = self._orAnchorPattern.match(pattern)
+        if matched is not None:
+            altPattern = []
+            for first, second in re.findall(r'(.*?)(\||\))', matched.group('start') + matched.group('end')):
+                alt = first[1:] if first.startswith('(') else first
+                if alt:
+                    altPattern.append(alt)
+            altPattern = altPattern[0] if len(altPattern) == 1 else '(' + '|'.join(altPattern) + ')'
+            return matched.group('before'), altPattern, matched.group('after')
+
     def add(self, keyword, sid, patterns):
         if keyword not in self._anmlNetworks:
             anml = ap.Anml()
             network = anml.CreateAutomataNetwork(anmlId = keyword)
             self._anmlNetworks[keyword] = (anml, network)
-        if len(patterns) == 1:
-            pattern, negation = patterns[0]
-            self._add_single_pattern(self._anmlNetworks[keyword][1], pattern, negation, reportCode = sid)
         else:
             network = self._anmlNetworks[keyword][1]
-            elements = self._add_multiple_patterns(network, patterns)
-            boolean = network.AddBoolean(reportCode = sid, match = True, eod = True, anmlId = self._next_boolean_id())
-            for element in elements:
-                network.AddAnmlEdge(element, boolean, ap.AnmlDefs.PORT_IN)
+
+        if len(patterns) == 1:
+            pattern, negation = patterns[0]
+            matched = self._match_or_anchor(pattern)
+            if matched is not None:
+                before, altPattern, after = matched
+                pattern = '/' + before + after + '/'
+                regex, latch = self._add_single_pattern(network, pattern, negation)
+                boolean = network.AddBoolean(mode = ap.BooleanMode.OR, anmlId = self._next_boolean_id(),
+                                             match = True, reportCode = sid, eod = True)
+                network.AddAnmlEdge(regex, boolean, ap.AnmlDefs.PORT_IN)
+                pattern = '/' + before + altPattern + after + '/'
+
+            self._add_single_pattern(network, pattern, negation, reportCode = sid)
+        else:
+            for index in xrange(len(patterns)):
+                pattern, negation = patterns[index]
+                matched = self._match_or_anchor(pattern)
+                if matched is not None:
+                    before, altPattern, after = matched
+                    patterns[index] = ('/' + before + '$' + after + '/', negation)
+                    self.add(keyword, sid, patterns)
+                    patterns[index] = ('/' + before + altPattern + after + '/', negation)
+                    self.add(keyword, sid, patterns)
+                    break
+            else:
+                elements = self._add_multiple_patterns(network, patterns)
+                boolean = network.AddBoolean(mode = ap.BooleanMode.AND, reportCode = sid, match = True, eod = True, anmlId = self._next_boolean_id())
+                for element in elements:
+                    network.AddAnmlEdge(element, boolean, ap.AnmlDefs.PORT_IN)
 
     def export(self, directory):
         for keyword, anmlNetwork in self._anmlNetworks.iteritems():
