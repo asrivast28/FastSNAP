@@ -256,11 +256,11 @@ class RulesConverter(object):
                     numLookaheads += self._lookaheadPattern.subn('', thisPattern)[1]
                 else:
                     raise RuntimeError, "Provided pcre pattern didn't match the standard pattern!"
+            negation = bool(negation)
             if thisModifiers:
                 thisPattern = '(?%s:%s)'%(thisModifiers, thisPattern)
-            if negation:
-                if not self._negations:
-                    raise RuntimeError, "Can't handle negations!"
+            if negation and not self._negations:
+                raise RuntimeError, "Can't handle negations!"
             if relative and len(independentPatterns) > 0:
                 if negation is not independentPatterns[-1][1]:
                     #print independentPatterns, thisPattern
