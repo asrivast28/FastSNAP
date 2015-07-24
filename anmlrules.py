@@ -10,8 +10,8 @@ class AnmlException(exceptions.Exception):
 
 class AnmlRules(object):
     def __init__(self):
-        self._orAnchorPattern = re.compile(r'^\/(?P<before>.*)(?P<start>\(|\(.*?\|)\$(?P<end>\|.*?\)|\))(?P<after>(?:\)*))\/$')
-        self._anchorPattern = re.compile(r'^\/(?P<open>(?:\(\?\w*:)?)(?P<start>\^?)(?P<pattern>.*?)(?<!\\)(?P<end>\$?)(?P<close>(?:\)*))\/$')
+        self._orAnchorPattern = re.compile(r'^\/(?P<before>.*)(?P<start>\(|\(.*?\|)\$(?P<end>\|.*?\)|\))(?P<after>(?:\)*))\/(?P<modifiers>.*)$')
+        self._anchorPattern = re.compile(r'^\/(?P<open>(?:\(\?\w*:)?)(?P<start>\^?)(?P<pattern>.*?)(?<!\\)(?P<end>\$?)(?P<close>(?:\)*))\/(?P<modifiers>.*)$')
         self.reset()
 
     def reset(self):
@@ -35,7 +35,7 @@ class AnmlRules(object):
         if not negation and reportCode is not None and not matched.group('end'):
             kwargs.update({'reportCode' : reportCode, 'match' : True})
         try:
-            pattern = '/' + matched.group('open') + matched.group('pattern') + matched.group('close') + '/'
+            pattern = '/' + matched.group('open') + matched.group('pattern') + matched.group('close') + '/' + matched.group('modifiers')
             regex = network.AddRegex(pattern, **kwargs)
         except ap.ApError, e:
             raise AnmlException, '\nAdding pattern "%s" failed.\n%s\n'%(pattern, str(e))
@@ -80,7 +80,7 @@ class AnmlRules(object):
                 if alt:
                     altPattern.append(alt)
             altPattern = altPattern[0] if len(altPattern) == 1 else '(' + '|'.join(altPattern) + ')'
-            return matched.group('before'), altPattern, matched.group('after')
+            return matched.group('before'), altPattern, matched.group('after'), matched.group('modifiers')
 
     def add(self, keyword, sid, patterns):
         if keyword not in self._anmlNetworks:
@@ -94,13 +94,13 @@ class AnmlRules(object):
             pattern, negation = patterns[0]
             matched = self._match_or_anchor(pattern)
             if matched is not None:
-                before, altPattern, after = matched
-                pattern = '/' + before + after + '/'
+                before, altPattern, after, modifiers = matched
+                pattern = '/' + before + after + '/' + modifiers
                 regex, latch = self._add_single_pattern(network, pattern, negation)
                 boolean = network.AddBoolean(mode = ap.BooleanMode.OR, anmlId = self._next_boolean_id(),
                                              match = True, reportCode = sid, eod = True)
                 network.AddAnmlEdge(regex, boolean, ap.AnmlDefs.PORT_IN)
-                pattern = '/' + before + altPattern + after + '/'
+                pattern = '/' + before + altPattern + after + '/' + modifiers
 
             self._add_single_pattern(network, pattern, negation, reportCode = sid)
         else:
@@ -108,10 +108,10 @@ class AnmlRules(object):
                 pattern, negation = patterns[index]
                 matched = self._match_or_anchor(pattern)
                 if matched is not None:
-                    before, altPattern, after = matched
-                    patterns[index] = ('/' + before + '$' + after + '/', negation)
+                    before, altPattern, after, modifiers = matched
+                    patterns[index] = ('/' + before + '$' + after + '/' + modifiers, negation)
                     self.add(keyword, sid, patterns)
-                    patterns[index] = ('/' + before + altPattern + after + '/', negation)
+                    patterns[index] = ('/' + before + altPattern + after + '/' + modifiers, negation)
                     self.add(keyword, sid, patterns)
                     break
             else:

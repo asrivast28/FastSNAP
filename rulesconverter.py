@@ -257,18 +257,22 @@ class RulesConverter(object):
                 else:
                     raise RuntimeError, "Provided pcre pattern didn't match the standard pattern!"
             negation = bool(negation)
-            if thisModifiers:
-                thisPattern = '(?%s:%s)'%(thisModifiers, thisPattern)
             if negation and not self._negations:
                 raise RuntimeError, "Can't handle negations!"
             if relative and len(independentPatterns) > 0:
                 if negation is not independentPatterns[-1][1]:
                     #print independentPatterns, thisPattern
                     raise RuntimeError, 'Unable to handle negations of this kind!'
-                independentPatterns[-1][0] = independentPatterns[-1][0] + thisPattern
+                prevPattern, prevModifiers = independentPatterns[-1][0]
+                if thisModifiers != prevModifiers:
+                    prevPattern = '(?%s:%s)'%(prevModifiers, prevPattern)
+                    thisPattern = '(?%s:%s)'%(thisModifiers, thisPattern)
+                    independentPatterns[-1][0] = (prevPattern + thisPattern, '')
+                else:
+                    independentPatterns[-1][0] = ('%s(?:%s)'%(independentPatterns[-1][0][0], thisPattern), thisModifiers)
             else:
-                independentPatterns.append([thisPattern, negation])
-        return [('/%s/'%(pattern), negation) for pattern, negation in independentPatterns]
+                independentPatterns.append([[thisPattern, thisModifiers], negation])
+        return [('/%s/%s'%tuple(pattern), negation) for pattern, negation in independentPatterns]
 
     def _get_bucket_keyword(self, bucket, patterns):
         base = bucket[0] + '_raw' if bucket[1] else bucket[0]
