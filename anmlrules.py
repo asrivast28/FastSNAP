@@ -4,6 +4,7 @@ import os
 import re
 import sys
 
+from builder import Builder
 
 class AnmlException(exceptions.Exception):
     pass
@@ -38,6 +39,21 @@ class AnmlRules(object):
             pattern = '/' + matched.group('open') + matched.group('pattern') + matched.group('close') + '/' + matched.group('modifiers')
             regex = network.AddRegex(pattern, **kwargs)
         except ap.ApError, e:
+            if 'back reference' in str(e):
+                print pattern
+                matched = re.match(r'^\/(?P<pattern>.*)\/(?P<modifiers>[ismexADSUXuJ]*)$', pattern)
+                changed = ''
+                try:
+                    changed = '/' + Builder().replace(matched.group('pattern')) + '/' + matched.group('modifiers')
+                    print changed
+                    print '\n\n'
+                except re.sre_parse.error:
+                    pass
+                try:
+                    network.AddRegex(changed, **kwargs)
+                except ap.ApError, e:
+                    print 'Still no luck. :('
+                    pass
             raise AnmlException, '\nAdding pattern "%s" failed.\n%s\n'%(pattern, str(e))
         if matched.group('end') and reportCode is not None:
             kwargs = {'mode' : ap.BooleanMode.OR, 'anmlId' : self._next_boolean_id(), 'eod' : True}
