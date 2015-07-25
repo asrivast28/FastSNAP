@@ -22,18 +22,20 @@ if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('rules', help = 'Specify the directory/file from which rules are to be extracted.',
                         type = RulesPath)
-    parser.add_argument('--independent', help = 'Flag for specifying if independent patterns should be handled.',
+    parser.add_argument('-i', '--independent', help = 'Flag for specifying if independent patterns should be handled.',
                         action = 'store_true')
-    parser.add_argument('--negations', help = 'Flag for specifying if negations should be handled.',
+    parser.add_argument('-n', '--negations', help = 'Flag for specifying if negations should be handled.',
                         action = 'store_true')
-    parser.add_argument('--maxpatterns', help = 'Maximum number of patterns in a bucket.',
+    parser.add_argument('-b', '--backreferences', help = 'Flag for specifying if back references should be handled.',
+                        action = 'store_true')
+    parser.add_argument('-m', '--maxpatterns', help = 'Maximum number of patterns in a bucket.',
                         type = int, default = 2000, metavar = 'N')
-    parser.add_argument('--compile', help = 'Flag for specifying if the anml should be compiled.',
+    parser.add_argument('-c', '--compile', help = 'Flag for specifying if the anml should be compiled.',
                         action = 'store_true')
     args = parser.parse_args()
 
     t = time.time()
-    converter = RulesConverter(args.independent, args.negations, args.maxpatterns, args.compile)
+    converter = RulesConverter(args.independent, args.negations, args.backreferences, args.maxpatterns, args.compile)
     # first determine which rules are not unsupported
     unsupported = converter.convert(args.rules)
     # now reset the converter

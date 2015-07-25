@@ -4,16 +4,22 @@ import os
 import re
 import sys
 
-from builder import Builder
+from parser import RegexParser
 
 class AnmlException(exceptions.Exception):
     pass
 
 class AnmlRules(object):
-    def __init__(self):
+    def __init__(self, backreferences):
+        self.reset()
+        self._backreferences = backreferences
+        if self._backreferences:
+            self._backreferenceSids = set()
+            self._backreferenceFile = open('backreferences.txt', 'wb')
+
         self._orAnchorPattern = re.compile(r'^\/(?P<before>.*)(?P<start>\(|\(.*?\|)\$(?P<end>\|.*?\)|\))(?P<after>(?:\)*))\/(?P<modifiers>.*)$')
         self._anchorPattern = re.compile(r'^\/(?P<open>(?:\(\?\w*:)?)(?P<start>\^?)(?P<pattern>.*?)(?<!\\)(?P<end>\$?)(?P<close>(?:\)*))\/(?P<modifiers>.*)$')
-        self.reset()
+        self._genericPattern = re.compile(r'^\/(?P<pattern>.*)\/(?P<modifiers>[ismexADSUXuJ]*)$')
 
     def reset(self):
         self._anmlNetworks = {}
@@ -30,31 +36,54 @@ class AnmlRules(object):
         network.AddAnmlEdge(element, ste, ap.AnmlDefs.PORT_IN)
         network.AddAnmlEdge(ste, ste, ap.AnmlDefs.PORT_IN)
 
-    def _add_single_pattern(self, network, pattern, negation, reportCode = None):
+    def _replace_back_references(self, pattern):
+        matched = self._genericPattern.match(pattern)
+        changed = None
+        try:
+            changed = RegexParser(matched.group('pattern')).replace_groups()
+            changed = '/' + changed + '/' + matched.group('modifiers')
+        except:
+            changedPattern, subCount = re.subn(r'\(\?<(\w+)>', lambda x : r'(?P<%s>'%x.group(1), pattern)
+            if subCount > 0:
+                return self._replace_back_references(changedPattern)
+            raise
+        else:
+            return changed
+
+    def _add_single_pattern(self, network, pattern, negation, sid, reportCode = None):
         matched = self._anchorPattern.match(pattern)
         kwargs = {'startType' : ap.AnmlDefs.START_OF_DATA if matched.group('start') else ap.AnmlDefs.ALL_INPUT}
         if not negation and reportCode is not None and not matched.group('end'):
             kwargs.update({'reportCode' : reportCode, 'match' : True})
         try:
             pattern = '/' + matched.group('open') + matched.group('pattern') + matched.group('close') + '/' + matched.group('modifiers')
-            regex = network.AddRegex(pattern, **kwargs)
-        except ap.ApError, e:
-            if 'back reference' in str(e):
-                print pattern
-                matched = re.match(r'^\/(?P<pattern>.*)\/(?P<modifiers>[ismexADSUXuJ]*)$', pattern)
-                changed = ''
+            if self._backreferences and sid in self._backreferenceSids:
                 try:
-                    changed = '/' + Builder().replace(matched.group('pattern')) + '/' + matched.group('modifiers')
-                    print changed
-                    print '\n\n'
+                    changed = self._replace_back_references(pattern)
                 except re.sre_parse.error:
                     pass
+                else:
+                    pattern = changed
+            regex = network.AddRegex(pattern, **kwargs)
+        except ap.ApError, e:
+            error = True
+            msg = str(e)
+            if self._backreferences and e.code == -112:
                 try:
-                    network.AddRegex(changed, **kwargs)
-                except ap.ApError, e:
-                    print 'Still no luck. :('
-                    pass
-            raise AnmlException, '\nAdding pattern "%s" failed.\n%s\n'%(pattern, str(e))
+                    changed = self._replace_back_references(pattern)
+                except re.sre_parse.error, f:
+                    msg = 'RegexParser Error: %s'%str(f)
+                else:
+                    try:
+                        regex = network.AddRegex(changed, **kwargs)
+                    except ap.ApError, f:
+                        msg = str(f)
+                    else:
+                        self._backreferenceFile.write('%d: %s\n'%(sid, pattern))
+                        self._backreferenceSids.add(sid)
+                        error = False
+            if error:
+                raise AnmlException, '\nAdding pattern "%s" for rule with SID %d failed.\n%s\n'%(pattern, sid, msg)
         if matched.group('end') and reportCode is not None:
             kwargs = {'mode' : ap.BooleanMode.OR, 'anmlId' : self._next_boolean_id(), 'eod' : True}
             if reportCode is not None:
@@ -75,10 +104,10 @@ class AnmlRules(object):
             self._latch_with_boolean(network, regex, boolean)
             return (boolean, True)
 
-    def _add_multiple_patterns(self, network, patterns):
+    def _add_multiple_patterns(self, network, patterns, sid):
         elements = []
         for pattern, negation in patterns:
-            regex, latch = self._add_single_pattern(network, pattern, negation)
+            regex, latch = self._add_single_pattern(network, pattern, negation, sid)
             if negation or not latch:
                 elements.append(regex)
             else:
@@ -112,13 +141,13 @@ class AnmlRules(object):
             if matched is not None:
                 before, altPattern, after, modifiers = matched
                 pattern = '/' + before + after + '/' + modifiers
-                regex, latch = self._add_single_pattern(network, pattern, negation)
+                regex, latch = self._add_single_pattern(network, pattern, negation, sid)
                 boolean = network.AddBoolean(mode = ap.BooleanMode.OR, anmlId = self._next_boolean_id(),
                                              match = True, reportCode = sid, eod = True)
                 network.AddAnmlEdge(regex, boolean, ap.AnmlDefs.PORT_IN)
                 pattern = '/' + before + altPattern + after + '/' + modifiers
 
-            self._add_single_pattern(network, pattern, negation, reportCode = sid)
+            self._add_single_pattern(network, pattern, negation, sid, reportCode = sid)
         else:
             for index in xrange(len(patterns)):
                 pattern, negation = patterns[index]
@@ -131,7 +160,7 @@ class AnmlRules(object):
                     self.add(keyword, sid, patterns)
                     break
             else:
-                elements = self._add_multiple_patterns(network, patterns)
+                elements = self._add_multiple_patterns(network, patterns, sid)
                 boolean = network.AddBoolean(mode = ap.BooleanMode.AND, reportCode = sid, match = True, eod = True, anmlId = self._next_boolean_id())
                 for element in elements:
                     network.AddAnmlEdge(element, boolean, ap.AnmlDefs.PORT_IN)

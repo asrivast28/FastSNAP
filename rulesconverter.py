@@ -140,7 +140,7 @@ class RulesConverter(object):
                 supportedRules.extend(fileSupportedRules)
         return supportedRules, totalRuleCount, patternRuleCount
 
-    def __init__(self, independent, negations, maxPatterns, compile):
+    def __init__(self, independent, negations, backreferences, maxPatterns, compile):
         """
         Constructor. Stores some of the program options.
         """
@@ -152,7 +152,7 @@ class RulesConverter(object):
         self._sids = set()
         self._unsupported = set()
 
-        self._anml = AnmlRules()
+        self._anml = AnmlRules(backreferences)
 
         self._patternCount = defaultdict(int)
 
@@ -278,10 +278,10 @@ class RulesConverter(object):
         base = bucket[0] + '_raw' if bucket[1] else bucket[0]
         if self._patternCount[base] > 0 and self._patternCount[base] + len(patterns) > self._maxPatterns:
             counter = 1
-            keyword = '%s_%d'%(base, counter) 
+            keyword = '%s_%d'%(base, counter)
             while self._patternCount[keyword] > 0 and self._patternCount[keyword] + len(patterns) > self._maxPatterns:
                 counter += 1
-                keyword = '%s_%d'%(base, counter) 
+                keyword = '%s_%d'%(base, counter)
         else:
             keyword = base
         self._patternCount[keyword] += len(patterns)
