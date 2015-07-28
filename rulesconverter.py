@@ -140,19 +140,18 @@ class RulesConverter(object):
                 supportedRules.extend(fileSupportedRules)
         return supportedRules, totalRuleCount, patternRuleCount
 
-    def __init__(self, independent, negations, backreferences, maxPatterns, compile):
+    def __init__(self, independent, negations, backreferences, maxStes, compile):
         """
         Constructor. Stores some of the program options.
         """
         self._independent = independent
         self._negations = negations
-        self._maxPatterns = maxPatterns
         self._compile = compile
 
         self._sids = set()
         self._unsupported = set()
 
-        self._anml = AnmlRules(backreferences)
+        self._anml = AnmlRules(maxStes, backreferences)
 
         self._patternCount = defaultdict(int)
 
@@ -274,19 +273,6 @@ class RulesConverter(object):
                 independentPatterns.append([[thisPattern, thisModifiers], negation])
         return [('/%s/%s'%tuple(pattern), negation) for pattern, negation in independentPatterns]
 
-    def _get_bucket_keyword(self, bucket, patterns):
-        base = bucket[0] + '_raw' if bucket[1] else bucket[0]
-        if self._patternCount[base] > 0 and self._patternCount[base] + len(patterns) > self._maxPatterns:
-            counter = 1
-            keyword = '%s_%d'%(base, counter)
-            while self._patternCount[keyword] > 0 and self._patternCount[keyword] + len(patterns) > self._maxPatterns:
-                counter += 1
-                keyword = '%s_%d'%(base, counter)
-        else:
-            keyword = base
-        self._patternCount[keyword] += len(patterns)
-        return keyword
-
     def reset(self):
         """
         Reset ANML rules.
@@ -349,12 +335,14 @@ class RulesConverter(object):
             if not handled:
                 continue
             for bucket, patterns in convertedStrings.iteritems():
-                keyword = self._get_bucket_keyword(bucket, patterns)
+                keyword = bucket[0] + '_raw' if bucket[1] else bucket[0]
                 try:
                     self._anml.add(keyword, sid, patterns)
                 except AnmlException, e:
                     unsupported.add(sid)
                     self._error_message(str(e))
+                else:
+                    self._patternCount[keyword] += len(patterns)
                 #writeString = '%d: %s'%(sid, patterns[0])
                 #if self._writeFiles and keyword not in outputFiles:
                     #outputFiles[keyword] = open(keyword + '.txt', 'wb')

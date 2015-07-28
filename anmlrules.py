@@ -10,8 +10,9 @@ class AnmlException(exceptions.Exception):
     pass
 
 class AnmlRules(object):
-    def __init__(self, backreferences):
+    def __init__(self, maxStes, backreferences):
         self.reset()
+        self._maxStes = maxStes
         self._backreferences = backreferences
         if self._backreferences:
             self._backreferenceSids = set()
@@ -127,14 +128,7 @@ class AnmlRules(object):
             altPattern = altPattern[0] if len(altPattern) == 1 else '(' + '|'.join(altPattern) + ')'
             return matched.group('before'), altPattern, matched.group('after'), matched.group('modifiers')
 
-    def add(self, keyword, sid, patterns):
-        if keyword not in self._anmlNetworks:
-            anml = ap.Anml()
-            network = anml.CreateAutomataNetwork(anmlId = keyword)
-            self._anmlNetworks[keyword] = (anml, network)
-        else:
-            network = self._anmlNetworks[keyword][1]
-
+    def _add_patterns(self, network, sid, patterns):
         if len(patterns) == 1:
             pattern, negation = patterns[0]
             matched = self._match_or_anchor(pattern)
@@ -155,9 +149,9 @@ class AnmlRules(object):
                 if matched is not None:
                     before, altPattern, after, modifiers = matched
                     patterns[index] = ('/' + before + '$' + after + '/' + modifiers, negation)
-                    self.add(keyword, sid, patterns)
+                    self._add_patterns(network, sid, patterns)
                     patterns[index] = ('/' + before + altPattern + after + '/' + modifiers, negation)
-                    self.add(keyword, sid, patterns)
+                    self._add_patterns(network, sid, patterns)
                     break
             else:
                 elements = self._add_multiple_patterns(network, patterns, sid)
@@ -165,18 +159,38 @@ class AnmlRules(object):
                 for element in elements:
                     network.AddAnmlEdge(element, boolean, ap.AnmlDefs.PORT_IN)
 
+    def add(self, keyword, sid, patterns):
+        if self._maxStes > 0:
+            anml = ap.Anml()
+            network = anml.CreateAutomataNetwork()
+            self._add_patterns(network, sid, patterns)
+            automaton, emap = anml.CompileAnml(ap.CompileDefs.AP_OPT_NO_PLACE_AND_ROUTE)
+            info = automaton.GetInfo()
+            if info.ste_count > self._maxStes:
+                keyword = '%s_%d'%(keyword, sid)
+            #print '%d: %d,%d,%d'%(sid, info.ste_count, info.bool_used, info.counter_used)
+        if keyword not in self._anmlNetworks:
+            anml = ap.Anml()
+            network = anml.CreateAutomataNetwork(anmlId = keyword)
+            self._anmlNetworks[keyword] = (anml, network)
+        else:
+            network = self._anmlNetworks[keyword][1]
+        self._add_patterns(network, sid, patterns)
+
+
     def export(self, directory):
         for keyword, anmlNetwork in self._anmlNetworks.iteritems():
             anmlNetwork[1].ExportAnml(os.path.join(directory, keyword + '.anml'))
 
     def compile(self, directory):
         for keyword, anmlNetwork in self._anmlNetworks.iteritems():
-            #if keyword != "general":
+            #if 'general' not in keyword:
                 #continue
-            print 'Compiling %s\n'%(keyword)
+            print '\nCompiling %s\n'%keyword
             try:
                 automata, emap = anmlNetwork[0].CompileAnml(options = ap.CompileDefs.AP_OPT_SHOW_DEBUG)
                 automata.Save(os.path.join(directory, keyword + '.fsm'))
             except ap.ApError, e:
                 sys.stderr.write('\nCompilation failed with the following error message.\n%s\n'%(str(e)))
                 sys.stderr.flush()
+            print '\nDone.\n'
