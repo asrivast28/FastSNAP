@@ -36,14 +36,8 @@ if __name__ == '__main__':
 
     t = time.time()
     converter = RulesConverter(args.independent, args.negations, args.backreferences, args.maxstes, args.compile)
-    # first determine which rules are not unsupported
-    unsupported = converter.convert(args.rules)
-    # now reset the converter
-    converter.reset()
-    # disable the error messages as they have been already output
-    converter.disableErrorMessages()
-    # convert again, only supported rules this time
-    converter.convert(args.rules, unsupported)
+    # convert the rules
+    converter.convert(args.rules)
     t = time.time() - t
     print '\nTotal time taken in converting the rules:', t
 

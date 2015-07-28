@@ -273,19 +273,13 @@ class RulesConverter(object):
                 independentPatterns.append([[thisPattern, thisModifiers], negation])
         return [('/%s/%s'%tuple(pattern), negation) for pattern, negation in independentPatterns]
 
-    def reset(self):
-        """
-        Reset ANML rules.
-        """
-        self._patternCount.clear()
-        self._anml.reset()
-
-    def convert(self, rulesFiles, unsupported = set()):
+    def convert(self, rulesFiles):
         """
         Convert all the rules in given rules files to the corresponding ANML or PCRE.
         """
         outputFiles = {}
         sids = set()
+        unsupported = set()
 
         allRules, totalRuleCount, patternRuleCount = self._get_all_rules(rulesFiles)
         patternCount = defaultdict(int)
@@ -296,8 +290,6 @@ class RulesConverter(object):
                 raise RuntimeError, "Encountered a rule with no SID!"
             sid = int(matched.group('sid'))
             sids.add(sid)
-            if sid in unsupported:
-                continue
             contentVectors = defaultdict(list)
             for pattern in self._genericPattern.finditer(rule):
                 keyword = 'general'
@@ -350,12 +342,8 @@ class RulesConverter(object):
                     #outputFiles[keyword].write(writeString + '\n')
                 #else:
                     #print writeString
-            if handled:
-                for keyword, patterns in convertedStrings.iteritems():
-                    keyword = keyword[0] + '_raw' if keyword[1] else keyword[0]
         self._print_statistics(totalRuleCount, patternRuleCount, len(allRules), len(sids - unsupported))
         #print self._patternCount
-        return unsupported
 
     def export(self, directory, compile):
         if self._compile:

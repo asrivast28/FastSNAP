@@ -11,9 +11,10 @@ class AnmlException(exceptions.Exception):
 
 class AnmlRules(object):
     def __init__(self, maxStes, backreferences):
-        self.reset()
         self._maxStes = maxStes
         self._backreferences = backreferences
+        self._anmlNetworks = {}
+        self._counter = 0
         if self._backreferences:
             self._backreferenceSids = set()
             self._backreferenceFile = open('backreferences.txt', 'wb')
@@ -21,10 +22,6 @@ class AnmlRules(object):
         self._orAnchorPattern = re.compile(r'^\/(?P<before>.*)(?P<start>\(|\(.*?\|)\$(?P<end>\|.*?\)|\))(?P<after>(?:\)*))\/(?P<modifiers>.*)$')
         self._anchorPattern = re.compile(r'^\/(?P<open>(?:\(\?\w*:)?)(?P<start>\^?)(?P<pattern>.*?)(?<!\\)(?P<end>\$?)(?P<close>(?:\)*))\/(?P<modifiers>.*)$')
         self._genericPattern = re.compile(r'^\/(?P<pattern>.*)\/(?P<modifiers>[ismexADSUXuJ]*)$')
-
-    def reset(self):
-        self._anmlNetworks = {}
-        self._counter = 0
 
     def _next_boolean_id(self):
         self._counter += 1
@@ -160,21 +157,28 @@ class AnmlRules(object):
                     network.AddAnmlEdge(element, boolean, ap.AnmlDefs.PORT_IN)
 
     def add(self, keyword, sid, patterns):
+        # try to add the pattern to a dummy anml object first
+        # this will throw an error, if there are any issues with patterns
+        anml = ap.Anml()
+        network = anml.CreateAutomataNetwork()
+        self._add_patterns(network, sid, patterns)
+
+        # check if the rule satisfies the maximum STEs limit
         if self._maxStes > 0:
-            anml = ap.Anml()
-            network = anml.CreateAutomataNetwork()
-            self._add_patterns(network, sid, patterns)
             automaton, emap = anml.CompileAnml(ap.CompileDefs.AP_OPT_NO_PLACE_AND_ROUTE)
             info = automaton.GetInfo()
             if info.ste_count > self._maxStes:
                 keyword = '%s_%d'%(keyword, sid)
-            #print '%d: %d,%d,%d'%(sid, info.ste_count, info.bool_used, info.counter_used)
+
+        # create a new network if it doesn't exist
         if keyword not in self._anmlNetworks:
             anml = ap.Anml()
             network = anml.CreateAutomataNetwork(anmlId = keyword)
             self._anmlNetworks[keyword] = (anml, network)
         else:
             network = self._anmlNetworks[keyword][1]
+
+        # now add pattern to the network
         self._add_patterns(network, sid, patterns)
 
 
