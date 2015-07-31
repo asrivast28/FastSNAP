@@ -19,8 +19,8 @@ class AnmlRules(object):
             self._backreferenceSids = set()
             self._backreferenceFile = open('backreferences.txt', 'wb')
 
-        self._orAnchorPattern = re.compile(r'^\/(?P<before>.*)(?P<start>\(|\(.*?\|)\$(?P<end>\|.*?\)|\))(?P<after>(?:\)*))\/(?P<modifiers>.*)$')
-        self._anchorPattern = re.compile(r'^\/(?P<open>(?:\(\?\w*:)?)(?P<start>\^?)(?P<pattern>.*?)(?<!\\)(?P<end>\$?)(?P<close>(?:\)*))\/(?P<modifiers>.*)$')
+        self._orAnchorPattern = re.compile(r'^\/(?P<before>.*)(?P<start>\(|\(.*?\|)\$(?P<end>\|.*?\)|\))(?P<after>(?:\)*))\/(?P<modifiers>\w*)$')
+        self._anchorPattern = re.compile(r'^\/(?P<open>(?:\(\?\w*:)?)(?P<start>\^?)(?P<pattern>.*?)(?<!\\)(?P<end>\$?)(?P<close>(?:\)*))\/(?P<modifiers>\w*)$')
         self._genericPattern = re.compile(r'^\/(?P<pattern>.*)\/(?P<modifiers>[ismexADSUXuJ]*)$')
 
     def _next_boolean_id(self):
