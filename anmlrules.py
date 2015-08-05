@@ -10,7 +10,7 @@ class AnmlException(exceptions.Exception):
     pass
 
 class AnmlRules(object):
-    def __init__(self, maxStes, backreferences):
+    def __init__(self, maxStes = 0, backreferences = False):
         self._maxStes = maxStes
         self._backreferences = backreferences
         self._anmlNetworks = {}
