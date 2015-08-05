@@ -212,7 +212,7 @@ class RulesConverter(object):
                         name = param.group('name')
                         value = int(param.group('value'))
                         if value < 0:
-                            raise RuntimeError, 'Handling of negative parameter values is not implemented!'
+                            raise RuntimeError, 'Handling of negative parameter values is not implemented'
                         offset = value if name in ['offset', 'distance'] else offset
                         depth = value if name in ['depth', 'within'] else depth
                         relative = True if name in ['distance', 'within'] else relative
@@ -220,7 +220,7 @@ class RulesConverter(object):
                     if offset != 0 or depth != -1:
                         contentSize = len(contentString) - escapePatternCount - (pipeSubFunc.hexPatternCount * 3)
                         if depth != -1 and depth < contentSize:
-                            raise RuntimeError, 'Encountered depth/within less than content string length!'
+                            raise RuntimeError, 'Encountered depth/within less than content string length'
                         if not relative:
                             ps.append('^')
                         end = (offset + depth) - contentSize if depth != -1 else 0
@@ -236,7 +236,7 @@ class RulesConverter(object):
                     ps.append(contentString)
                     thisPattern = ''.join(ps)
                 else:
-                    raise RuntimeError, "Provided content pattern didn't match the standard pattern!"
+                    raise RuntimeError, "Provided content pattern didn't match the standard pattern"
             else:
                 matched = self._pcrePattern.search(p)
                 if matched is not None:
@@ -254,10 +254,10 @@ class RulesConverter(object):
                     thisPattern = matched.group('pattern')
                     numLookaheads += self._lookaheadPattern.subn('', thisPattern)[1]
                 else:
-                    raise RuntimeError, "Provided pcre pattern didn't match the standard pattern!"
+                    raise RuntimeError, "Provided pcre pattern didn't match the standard pattern"
             negation = bool(negation)
             if negation and not self._negations:
-                raise RuntimeError, "Can't handle negations!"
+                raise RuntimeError, "Can't handle negations"
             if relative and len(independentPatterns) > 0:
                 if negation is not independentPatterns[-1][1]:
                     #print independentPatterns, thisPattern
@@ -287,7 +287,7 @@ class RulesConverter(object):
         for rule in allRules:
             matched = self._sidPattern.search(rule)
             if matched is None:
-                raise RuntimeError, "Encountered a rule with no SID!"
+                raise RuntimeError, 'Encountered a rule with no SID'
             sid = int(matched.group('sid'))
             sids.add(sid)
             contentVectors = defaultdict(list)
@@ -317,7 +317,7 @@ class RulesConverter(object):
                 try:
                     independentPatterns = self._get_independent_patterns(patterns)
                     if not self._independent and len(independentPatterns) > 1:
-                        raise RuntimeError, "Can't handle multiple independent patterns per rule!"
+                        raise RuntimeError, "Can't handle multiple independent patterns per rule"
                     convertedStrings[bucket] = independentPatterns
                 except RuntimeError, e:
                     unsupported.add(sid)
