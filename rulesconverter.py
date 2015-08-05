@@ -187,8 +187,10 @@ class RulesConverter(object):
             thisModifiers = ''
             thisPattern = ''
             negation = ''
+            isContent = False
 
             if p.startswith('content'):
+                isContent = True
                 content = self._contentPattern.search(p)
                 if content is not None:
                     offset = 0
@@ -259,19 +261,31 @@ class RulesConverter(object):
             if negation and not self._negations:
                 raise RuntimeError, "Can't handle negations"
             if relative and len(independentPatterns) > 0:
-                if negation is not independentPatterns[-1][1]:
-                    #print independentPatterns, thisPattern
-                    raise RuntimeError, 'Unable to handle negations of this kind!'
                 prevPattern, prevModifiers = independentPatterns[-1][0]
-                if thisModifiers != prevModifiers:
+                if negation is not independentPatterns[-1][1]:
+                    if not negation:
+                        raise RuntimeError, 'Unable to handle dependence on negative expressions'
+                    if isContent:
+                        if depth != -1:
+                            if independentPatterns[-1][2] is None:
+                                independentPatterns[-1][2] = ('/%s/%s'%(thisPattern, thisModifiers), offset + depth)
+                            else:
+                                raise RuntimeError, 'Unable to handle more than one dependent negations'
+                        else:
+                            raise RuntimeError, 'Unable to handle dependent unbounded negations'
+                    else:
+                        raise RuntimeError, 'Unable to handle dependent negations of PCRE type'
+                elif independentPatterns[-1][2] is not None:
+                    raise RuntimeError, 'Unable to add dependent expression to an expression with negated dependent'
+                elif thisModifiers != prevModifiers:
                     prevPattern = '(?%s:%s)'%(prevModifiers, prevPattern)
                     thisPattern = '(?%s:%s)'%(thisModifiers, thisPattern)
                     independentPatterns[-1][0] = (prevPattern + thisPattern, '')
                 else:
                     independentPatterns[-1][0] = ('%s(?:%s)'%(independentPatterns[-1][0][0], thisPattern), thisModifiers)
             else:
-                independentPatterns.append([[thisPattern, thisModifiers], negation])
-        return [('/%s/%s'%tuple(pattern), negation) for pattern, negation in independentPatterns]
+                independentPatterns.append([[thisPattern, thisModifiers], negation, None])
+        return [('/%s/%s'%tuple(pattern), negation, dependent) for pattern, negation, dependent in independentPatterns]
 
     def convert(self, rulesFiles):
         """

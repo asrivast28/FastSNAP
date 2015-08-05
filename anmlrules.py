@@ -48,10 +48,39 @@ class AnmlRules(object):
         else:
             return changed
 
-    def _add_single_pattern(self, network, pattern, negation, sid, reportCode = None):
+    def _add_negative_dependent(self, network, regex, dependent, reportCode):
+        expression, depth = dependent
+        exprRegex = network.AddRegex(expression)
+        depthRegex = network.AddRegex('/.{%d}/'%depth)
+        rangeRegex = network.AddRegex('/.{1,%d}/'%(depth - 1))
+        network.AddAnmlEdge(regex, exprRegex)
+        network.AddAnmlEdge(regex, depthRegex)
+        network.AddAnmlEdge(regex, rangeRegex)
+
+        counter = network.AddCounter(1, mode = ap.CounterMode.STOP_HOLD)
+        network.AddAnmlEdgeEx(exprRegex, 0, counter, ap.AnmlDefs.COUNT_ONE_PORT)
+        network.AddAnmlEdgeEx(depthRegex, 0, counter, ap.AnmlDefs.COUNT_ONE_PORT)
+        network.AddAnmlEdgeEx(regex, 0, counter, ap.AnmlDefs.RESET_PORT)
+
+        kwargs = {'mode' : ap.BooleanMode.AND, 'anmlId' : self._next_boolean_id()}
+        if reportCode is not None:
+            kwargs.update({'match' : True, 'reportCode' : reportCode})
+        booleanAnd = network.AddBoolean(**kwargs)
+        network.AddAnmlEdge(depthRegex, booleanAnd)
+        network.AddAnmlEdge(counter, booleanAnd)
+
+        kwargs = {'mode' : ap.BooleanMode.OR, 'anmlId' : self._next_boolean_id()}
+        if reportCode is not None:
+            kwargs.update({'eod' : True, 'match' : True, 'reportCode' : reportCode})
+        booleanOr = network.AddBoolean(**kwargs)
+        network.AddAnmlEdge(regex, booleanOr)
+        network.AddAnmlEdge(rangeRegex, booleanOr)
+        return booleanAnd, booleanOr
+
+    def _add_single_pattern(self, network, pattern, negation, dependent, sid, reportCode = None):
         matched = self._anchorPattern.match(pattern)
         kwargs = {'startType' : ap.AnmlDefs.START_OF_DATA if matched.group('start') else ap.AnmlDefs.ALL_INPUT}
-        if not negation and reportCode is not None and not matched.group('end'):
+        if not negation and reportCode is not None and not matched.group('end') and not dependent:
             kwargs.update({'reportCode' : reportCode, 'match' : True})
         try:
             pattern = '/' + matched.group('open') + matched.group('pattern') + matched.group('close') + '/' + matched.group('modifiers')
@@ -89,6 +118,9 @@ class AnmlRules(object):
             boolean = network.AddBoolean(**kwargs)
             network.AddAnmlEdge(regex, boolean, ap.AnmlDefs.PORT_IN)
             return (boolean, False)
+        if dependent:
+            booleanAnd, booleanOr = self._add_negative_dependent(network, regex, dependent, reportCode)
+            return [(booleanAnd, True), (booleanOr, False)]
         if not negation:
             if matched.group('end'):
                 return (regex, reportCode is not None)
@@ -104,14 +136,16 @@ class AnmlRules(object):
 
     def _add_multiple_patterns(self, network, patterns, sid):
         elements = []
-        for pattern, negation in patterns:
-            regex, latch = self._add_single_pattern(network, pattern, negation, sid)
-            if negation or not latch:
-                elements.append(regex)
-            else:
-                boolean = network.AddBoolean(mode = ap.BooleanMode.OR, anmlId = self._next_boolean_id())
-                self._latch_with_boolean(network, regex, boolean)
-                elements.append(boolean)
+        for pattern, negation, dependent in patterns:
+            returned = self._add_single_pattern(network, pattern, negation, dependent, sid)
+            returned = [returned] if not isinstance(returned, list) else returned
+            for element, latch in returned:
+                if negation or not latch:
+                    elements.append(element)
+                else:
+                    boolean = network.AddBoolean(mode = ap.BooleanMode.OR, anmlId = self._next_boolean_id())
+                    self._latch_with_boolean(network, element, boolean)
+                    elements.append(boolean)
         return elements
 
     def _match_or_anchor(self, pattern):
@@ -127,27 +161,27 @@ class AnmlRules(object):
 
     def _add_patterns(self, network, sid, patterns):
         if len(patterns) == 1:
-            pattern, negation = patterns[0]
+            pattern, negation, dependent = patterns[0]
             matched = self._match_or_anchor(pattern)
             if matched is not None:
                 before, altPattern, after, modifiers = matched
                 pattern = '/' + before + after + '/' + modifiers
-                regex, latch = self._add_single_pattern(network, pattern, negation, sid)
+                regex, latch = self._add_single_pattern(network, pattern, negation, dependent, sid)
                 boolean = network.AddBoolean(mode = ap.BooleanMode.OR, anmlId = self._next_boolean_id(),
                                              match = True, reportCode = sid, eod = True)
                 network.AddAnmlEdge(regex, boolean, ap.AnmlDefs.PORT_IN)
                 pattern = '/' + before + altPattern + after + '/' + modifiers
 
-            self._add_single_pattern(network, pattern, negation, sid, reportCode = sid)
+            self._add_single_pattern(network, pattern, negation, dependent, sid, reportCode = sid)
         else:
             for index in xrange(len(patterns)):
-                pattern, negation = patterns[index]
+                pattern, negation, dependent = patterns[index]
                 matched = self._match_or_anchor(pattern)
                 if matched is not None:
                     before, altPattern, after, modifiers = matched
-                    patterns[index] = ('/' + before + '$' + after + '/' + modifiers, negation)
+                    patterns[index] = ('/' + before + '$' + after + '/' + modifiers, negation, dependent)
                     self._add_patterns(network, sid, patterns)
-                    patterns[index] = ('/' + before + altPattern + after + '/' + modifiers, negation)
+                    patterns[index] = ('/' + before + altPattern + after + '/' + modifiers, negation, dependent)
                     self._add_patterns(network, sid, patterns)
                     break
             else:
