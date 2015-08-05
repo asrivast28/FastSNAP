@@ -225,9 +225,9 @@ class RulesConverter(object):
                             ps.append('^')
                         end = (offset + depth) - contentSize if depth != -1 else 0
                         if offset > 0 or end > offset:
-                            ps.append('.{%d'%(offset))
+                            ps.append('.{%d'%offset)
                             if end > offset:
-                                ps.append(',%d'%(end))
+                                ps.append(',%d'%end)
                             ps.append('}')
                         if depth == -1:
                             ps.append('.*')
