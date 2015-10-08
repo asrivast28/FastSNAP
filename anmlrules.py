@@ -65,17 +65,25 @@ class AnmlRules(object):
         kwargs = {'mode' : ap.BooleanMode.AND, 'anmlId' : self._next_boolean_id()}
         if reportCode is not None:
             kwargs.update({'match' : True, 'reportCode' : reportCode})
-        booleanAnd = network.AddBoolean(**kwargs)
-        network.AddAnmlEdge(depthRegex, booleanAnd)
-        network.AddAnmlEdge(counter, booleanAnd)
+        mainAnd = network.AddBoolean(**kwargs)
+        network.AddAnmlEdge(depthRegex, mainAnd)
+        network.AddAnmlEdge(counter, mainAnd)
 
-        kwargs = {'mode' : ap.BooleanMode.OR, 'anmlId' : self._next_boolean_id()}
-        if reportCode is not None:
-            kwargs.update({'eod' : True, 'match' : True, 'reportCode' : reportCode})
-        booleanOr = network.AddBoolean(**kwargs)
+        booleanOr = network.AddBoolean(mode = ap.BooleanMode.OR, anmlId = self._next_boolean_id())
         network.AddAnmlEdge(regex, booleanOr)
         network.AddAnmlEdge(rangeRegex, booleanOr)
-        return booleanAnd, booleanOr
+
+        booleanNot = network.AddBoolean(mode = ap.BooleanMode.NOT, anmlId = self._next_boolean_id())
+        network.AddAnmlEdge(counter, booleanNot)
+
+        kwargs = {'mode' : ap.BooleanMode.AND, 'anmlId' : self._next_boolean_id()}
+        if reportCode is not None:
+            kwargs.update({'eod' : True, 'match' : True, 'reportCode' : reportCode})
+        eodAnd = network.AddBoolean(**kwargs)
+        network.AddAnmlEdge(booleanNot, eodAnd)
+        network.AddAnmlEdge(booleanOr, eodAnd)
+
+        return mainAnd, eodAnd
 
     def _add_single_pattern(self, network, pattern, negation, dependent, sid, reportCode = None):
         matched = self._anchorPattern.match(pattern)
@@ -119,8 +127,8 @@ class AnmlRules(object):
             network.AddAnmlEdge(regex, boolean, ap.AnmlDefs.PORT_IN)
             return (boolean, False)
         if dependent:
-            booleanAnd, booleanOr = self._add_negative_dependent(network, regex, dependent, reportCode)
-            return [(booleanAnd, True), (booleanOr, False)]
+            main, eod = self._add_negative_dependent(network, regex, dependent, reportCode)
+            return [(main, True), (eod, False)]
         if not negation:
             if matched.group('end'):
                 return (regex, reportCode is not None)
@@ -198,9 +206,11 @@ class AnmlRules(object):
         self._add_patterns(network, sid, patterns)
 
         # check if the rule satisfies the maximum STEs limit
+        automaton, emap = anml.CompileAnml(ap.CompileDefs.AP_OPT_NO_PLACE_AND_ROUTE)
+        info = automaton.GetInfo()
+        if info.ste_count > 49152 / 2:
+            raise AnmlException, '\nAdding patterns for rule with SID %d failed.\nRequired resources exceeded those in one half-core.\n'%sid
         if self._maxStes > 0:
-            automaton, emap = anml.CompileAnml(ap.CompileDefs.AP_OPT_NO_PLACE_AND_ROUTE)
-            info = automaton.GetInfo()
             if info.ste_count > self._maxStes:
                 keyword = '%s_%d'%(keyword, sid)
 
