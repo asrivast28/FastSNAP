@@ -206,13 +206,14 @@ class AnmlRules(object):
         self._add_patterns(network, sid, patterns)
 
         # check if the rule satisfies the maximum STEs limit
-        automaton, emap = anml.CompileAnml(ap.CompileDefs.AP_OPT_NO_PLACE_AND_ROUTE)
+        automaton, emap = anml.CompileAnml()
         info = automaton.GetInfo()
         if info.ste_count > 49152 / 2:
             raise AnmlException, '\nAdding patterns for rule with SID %d failed.\nRequired resources exceeded those in one half-core.\n'%sid
         if self._maxStes > 0:
             if info.ste_count > self._maxStes:
                 keyword = '%s_%d'%(keyword, sid)
+        keyword = '%s_%d'%(keyword, info.clock_divisor)
 
         # create a new network if it doesn't exist
         if keyword not in self._anmlNetworks:
