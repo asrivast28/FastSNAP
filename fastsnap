@@ -3,6 +3,7 @@
 from argparse import ArgumentParser, ArgumentTypeError
 import os
 import time
+import sys
 
 from rulesconverter import RulesConverter
 
@@ -22,27 +23,39 @@ if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('rules', help = 'Specify the directory/file from which rules are to be extracted.',
                         type = RulesPath)
-    parser.add_argument('-i', '--independent', help = 'Flag for specifying if independent patterns should be handled.',
+    parser.add_argument('-i', '--independent', help = 'Flag for specifying that independent patterns should be handled.',
                         action = 'store_true')
-    parser.add_argument('-n', '--negations', help = 'Flag for specifying if negations should be handled.',
+    parser.add_argument('-n', '--negations', help = 'Flag for specifying that negations should be handled.',
                         action = 'store_true')
-    parser.add_argument('-b', '--backreferences', help = 'Flag for specifying if back references should be handled.',
+    parser.add_argument('-b', '--backreferences', help = 'Flag for specifying that back references should be handled.',
                         action = 'store_true')
     parser.add_argument('-m', '--maxstes', help = 'Maximum number of STEs allowed for one rule to be added in a bucket.',
                         type = int, default = 0, metavar = 'N')
-    parser.add_argument('-c', '--compile', help = 'Flag for specifying if the anml should be compiled.',
+    parser.add_argument('-c', '--compile', help = 'Flag for specifying that the generated anml should be compiled.',
+                        action = 'store_true')
+    parser.add_argument('-l', '--logging', help = 'Flag for specifying that logging should be enabled.',
                         action = 'store_true')
     args = parser.parse_args()
 
-    t = time.time()
-    converter = RulesConverter(args.independent, args.negations, args.backreferences, args.maxstes, args.compile)
-    # convert the rules
-    converter.convert(args.rules)
-    t = time.time() - t
-    print '\nTotal time taken in converting the rules:', t
+    with open('compile.log', 'wb') as c, open('error.log', 'wb') as e:
+        if args.logging:
+            sys.stdout = c
+            sys.stderr = e
 
-    # export them as ANML
-    t = time.time()
-    converter.export('test_anml', args.compile)
-    t = time.time() - t
-    print 'Total time taken in exporting:', t
+        t1 = time.time()
+        converter = RulesConverter(args.independent, args.negations, args.backreferences, args.maxstes, args.compile)
+        # convert the rules
+        converter.convert(args.rules)
+        t1 = time.time() - t1
+
+        # export them as ANML
+        t2 = time.time()
+        converter.export('test_anml', args.compile)
+        t2 = time.time() - t2
+
+        if args.logging:
+            sys.stdout = sys.__stdout__
+            sys.stderr = sys.__stderr__
+
+    print '\nTotal time taken in converting the rules:', t1
+    print 'Total time taken in exporting:', t2

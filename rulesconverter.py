@@ -1,7 +1,7 @@
 from collections import defaultdict
 import os
 import re
-from sys import stderr
+import sys
 
 from anmlrules import AnmlRules, AnmlException
 
@@ -64,8 +64,8 @@ class RulesConverter(object):
     @classmethod
     def _error_message(cls, message):
         if cls._printMessages:
-            stderr.write(message)
-            stderr.flush()
+            sys.stderr.write(message)
+            sys.stderr.flush()
 
     @classmethod
     def _print_statistics(cls, totalRules, patternRules, supportedRules, convertedRules):

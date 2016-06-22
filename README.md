@@ -10,7 +10,11 @@ It further needs Micron AP SDK for conversion to ANML and compilation.
 
 Execution
 =========
-The executable can be executed as:    .
+The executable can be executed as:
 ```
 ./fastsnap [options]
+```
+Run the following for more options:
+```
+./fastsnap --help
 ```
