@@ -213,7 +213,9 @@ class AnmlRules(object):
         if self._maxStes > 0:
             if info.ste_count > self._maxStes:
                 keyword = '%s_%d'%(keyword, sid)
-        keyword = '%s_%d'%(keyword, info.clock_divisor)
+        if info.clock_divisor > 1:
+            keyword = '%s_%d'%(keyword, info.clock_divisor)
+            #print keyword, sid, info.clock_divisor
 
         # create a new network if it doesn't exist
         if keyword not in self._anmlNetworks:
