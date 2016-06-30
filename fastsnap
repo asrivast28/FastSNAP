@@ -37,9 +37,8 @@ if __name__ == '__main__':
                         action = 'store_true')
     args = parser.parse_args()
 
-    with open('compile.log', 'wb') as c, open('error.log', 'wb') as e:
+    with open('error.log', 'wb') as e:
         if args.logging:
-            sys.stdout = c
             sys.stderr = e
 
         t1 = time.time()
@@ -47,15 +46,13 @@ if __name__ == '__main__':
         # convert the rules
         converter.convert(args.rules)
         t1 = time.time() - t1
+        print '\nTotal time taken in converting the rules:', t1
 
         # export them as ANML
         t2 = time.time()
         converter.export('test_anml', args.compile)
         t2 = time.time() - t2
+        print 'Total time taken in exporting:', t2
 
         if args.logging:
-            sys.stdout = sys.__stdout__
             sys.stderr = sys.__stderr__
-
-    print '\nTotal time taken in converting the rules:', t1
-    print 'Total time taken in exporting:', t2
