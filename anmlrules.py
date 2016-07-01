@@ -239,7 +239,9 @@ class AnmlRules(object):
                 #continue
             print '\nCompiling %s\n'%keyword
             try:
-                automata, emap = anmlNetwork[0].CompileAnml(options = ap.CompileDefs.AP_OPT_SHOW_DEBUG)
+                automata, emap = anmlNetwork[0].CompileAnml()
+                info = automata.GetInfo()
+                print 'Clock divisor', info.clock_divisor
                 automata.Save(os.path.join(directory, keyword + '.fsm'))
             except ap.ApError, e:
                 sys.stderr.write('\nCompilation failed with the following error message.\n%s\n'%(str(e)))
