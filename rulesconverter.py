@@ -329,6 +329,8 @@ class RulesConverter(object):
             handled = True
             for bucket, patterns in contentVectors.iteritems():
                 try:
+                    if sid in [26242, 20207, 26852, 26853]:
+                        raise RuntimeError, "Skipping rule because it takes LOT of time in compilation"
                     independentPatterns = self._get_independent_patterns(patterns)
                     if not self._independent and len(independentPatterns) > 1:
                         raise RuntimeError, "Can't handle multiple independent patterns per rule"
