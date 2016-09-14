@@ -29,7 +29,9 @@ if __name__ == '__main__':
                         action = 'store_true')
     parser.add_argument('-b', '--backreferences', help = 'Flag for specifying that back references should be handled.',
                         action = 'store_true')
-    parser.add_argument('-m', '--maxstes', help = 'Maximum number of STEs allowed for one rule to be added in a bucket.',
+    parser.add_argument('-s', '--maxstes', help = 'Maximum number of STEs allowed for one rule to be added in a bucket.',
+                        type = int, default = 0, metavar = 'N')
+    parser.add_argument('-r', '--maxrepeats', help = 'Maximum number of bounded repetitions.',
                         type = int, default = 0, metavar = 'N')
     parser.add_argument('-c', '--compile', help = 'Flag for specifying that the generated anml should be compiled.',
                         action = 'store_true')
@@ -42,7 +44,7 @@ if __name__ == '__main__':
             sys.stderr = e
 
         t1 = time.time()
-        converter = RulesConverter(args.independent, args.negations, args.backreferences, args.maxstes, args.compile)
+        converter = RulesConverter(args.independent, args.negations, args.backreferences, args.maxstes, args.maxrepeats, args.compile)
         # convert the rules
         converter.convert(args.rules)
         t1 = time.time() - t1

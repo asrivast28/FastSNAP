@@ -27,6 +27,7 @@ class RegexParser(object):
 
     def __init__(self, regex):
         self._parsed = re.sre_parse.parse(regex)
+        self._repeat_bound = None
         self._cache = dict()
         self._cases = {
             'literal' : lambda x: re.escape(chr(x)),
@@ -55,6 +56,18 @@ class RegexParser(object):
         for state in self._parsed:
             newstr.append(self._handle_state(state))
         return ''.join(newstr)
+
+    def replace_repeats(self, repeat_bound):
+        """
+        Builds and returns a regex in which all the bounded repetitions
+        above the given threshold are replaced by unbounded repetitions.
+        """
+        self._repeat_bound = repeat_bound
+        self._is_changed = False
+        newstr = []
+        for state in self._parsed:
+            newstr.append(self._handle_state(state))
+        return None if not self._is_changed else ''.join(newstr)
 
     def _handle_state(self, state):
         opcode, value = state
@@ -85,10 +98,16 @@ class RegexParser(object):
             else:
                 result.append('{%d,'%start_range)
         else:
-            result.append('{%d'%start_range)
+            repeat = []
+            repeat.append('{%d'%start_range)
             if end_range != start_range:
-                result.append(',%d'%end_range)
-            result.append('}')
+                repeat.append(',%d'%end_range)
+            repeat.append('}')
+            if self._repeat_bound is not None and ((start_range > self._repeat_bound) or ((end_range - start_range) > self._repeat_bound)):
+                result.append('*')
+                self._is_changed = True
+            else:
+                result.extend(repeat)
         if not greedy:
             result.append('?')
         return ''.join(result)

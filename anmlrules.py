@@ -10,11 +10,17 @@ class AnmlException(exceptions.Exception):
     pass
 
 class AnmlRules(object):
-    def __init__(self, maxStes = 0, backreferences = False):
+    def __init__(self, maxStes = 0, maxRepeats = 0, backreferences = False):
         self._maxStes = maxStes
+        self._maxRepeats = maxRepeats
         self._backreferences = backreferences
         self._anmlNetworks = {}
         self._counter = 0
+
+        if self._maxRepeats > 0:
+            self._repetitionSids = set()
+            self._repetitionFile = open('repetitions.txt', 'wb')
+
         if self._backreferences:
             self._backreferenceSids = set()
             self._backreferenceFile = open('backreferences.txt', 'wb')
@@ -47,6 +53,13 @@ class AnmlRules(object):
             raise
         else:
             return changed
+
+    def _replace_bounded_repetitions(self, pattern, maxRepeats):
+        matched = self._genericPattern.match(pattern)
+        changed = RegexParser(matched.group('pattern')).replace_repeats(maxRepeats)
+        if changed is not None:
+            changed = '/' + changed + '/' + matched.group('modifiers')
+        return changed
 
     def _add_negative_dependent(self, network, regex, dependent, reportCode):
         expression, depth = dependent
@@ -90,15 +103,25 @@ class AnmlRules(object):
         kwargs = {'startType' : ap.AnmlDefs.START_OF_DATA if matched.group('start') else ap.AnmlDefs.ALL_INPUT}
         if not negation and reportCode is not None and not matched.group('end') and not dependent:
             kwargs.update({'reportCode' : reportCode, 'match' : True})
-        try:
-            pattern = '/' + matched.group('open') + matched.group('pattern') + matched.group('close') + '/' + matched.group('modifiers')
-            if self._backreferences and sid in self._backreferenceSids:
-                try:
-                    changed = self._replace_back_references(pattern)
-                except re.sre_parse.error:
-                    pass
-                else:
+        pattern = '/' + matched.group('open') + matched.group('pattern') + matched.group('close') + '/' + matched.group('modifiers')
+        if self._backreferences and sid in self._backreferenceSids:
+            try:
+                changed = self._replace_back_references(pattern)
+            except re.sre_parse.error:
+                pass
+            else:
+                pattern = changed
+        if self._maxRepeats > 0:
+            try:
+                changed = self._replace_bounded_repetitions(pattern, self._maxRepeats)
+                if changed is not None:
+                    if sid not in self._repetitionSids:
+                        self._repetitionFile.write('%d: %s\n'%(sid, pattern))
+                        self._repetitionSids.add(sid)
                     pattern = changed
+            except:
+                pass
+        try:
             regex = network.AddRegex(pattern, **kwargs)
         except ap.ApError, e:
             error = True
