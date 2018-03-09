@@ -12,9 +12,9 @@ Execution
 =========
 The executable can be executed as:
 ```
-./fastsnap [options]
+./fastsnap.py [options]
 ```
 Run the following for more options:
 ```
-./fastsnap --help
+./fastsnap.py --help
 ```
