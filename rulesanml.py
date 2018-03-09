@@ -245,6 +245,7 @@ class RulesAnml(object):
         info = automaton.GetInfo()
         if info.ste_count > 49152 / 2:
             raise AnmlException, '\nAdding patterns for rule with SID %d failed.\nRequired resources exceeded those in one half-core.\n'%sid
+        bucket = keyword
         if self._maxStes > 0:
             if info.ste_count > self._maxStes:
                 bucket = '%s_%d'%(keyword, sid)
