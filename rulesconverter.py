@@ -1,14 +1,20 @@
+##
+# @file rulesconverter.py
+# @author Ankit Srivastava <asrivast@gatech.edu>
+# @version 1.0
+# @date 2018-03-09
+
 from collections import defaultdict
 import os
 import re
 import sys
 
-from anmlrules import AnmlRules, AnmlException
+from rulesanml import RulesAnml, AnmlException
 
 
 class RulesConverter(object):
     """
-    Class for converting Snort rules to ANML.
+    Class for converting Snort rules to ANML-NFA.
     """
     # list of Snort keywords that are not supported
     _unsupportedKeywords = (
@@ -151,7 +157,7 @@ class RulesConverter(object):
         self._sids = set()
         self._unsupported = set()
 
-        self._anml = AnmlRules(maxStes, maxRepeats, backreferences)
+        self._anml = RulesAnml(maxStes, maxRepeats, backreferences)
 
         self._patternCount = defaultdict(int)
 
@@ -289,7 +295,7 @@ class RulesConverter(object):
 
     def convert(self, rulesFiles):
         """
-        Convert all the rules in given rules files to the corresponding ANML or PCRE.
+        Convert all the rules in given rules files to the corresponding ANML-NFA or PCRE.
         """
         outputFiles = {}
         sids = set()
@@ -362,6 +368,9 @@ class RulesConverter(object):
         #print self._patternCount
 
     def export(self, directory, compile):
+        """
+        Write out the ANML-NFA or the AP-FSM to the given directory.
+        """
         if self._compile:
             self._anml.compile(directory)
         else:

@@ -1,3 +1,9 @@
+##
+# @file rulesanml.py
+# @author Ankit Srivastava <asrivast@gatech.edu>
+# @version 1.0
+# @date 2018-03-09
+
 import micronap.sdk as ap
 import exceptions
 import os
@@ -9,7 +15,10 @@ from parser import RegexParser
 class AnmlException(exceptions.Exception):
     pass
 
-class AnmlRules(object):
+class RulesAnml(object):
+    """
+    Class for storing ANML-NFAs corresponding to the Snort rules.
+    """
     def __init__(self, maxStes = 0, maxRepeats = 0, backreferences = False):
         self._maxStes = maxStes
         self._maxRepeats = maxRepeats
@@ -222,6 +231,9 @@ class AnmlRules(object):
                     network.AddAnmlEdge(element, boolean, ap.AnmlDefs.PORT_IN)
 
     def add(self, keyword, sid, patterns):
+        """
+        Add the given patterns, identified by the sid, to the bucket corresponding to the keyword.
+        """
         # try to add the pattern to a dummy anml object first
         # this will throw an error, if there are any issues with patterns
         anml = ap.Anml()
@@ -235,37 +247,43 @@ class AnmlRules(object):
             raise AnmlException, '\nAdding patterns for rule with SID %d failed.\nRequired resources exceeded those in one half-core.\n'%sid
         if self._maxStes > 0:
             if info.ste_count > self._maxStes:
-                keyword = '%s_%d'%(keyword, sid)
+                bucket = '%s_%d'%(keyword, sid)
         if info.clock_divisor > 1:
-            keyword = '%s_%d'%(keyword, info.clock_divisor)
+            bucket = '%s_%d'%(keyword, info.clock_divisor)
             #print keyword, sid, info.clock_divisor
 
         # create a new network if it doesn't exist
-        if keyword not in self._anmlNetworks:
+        if bucket not in self._anmlNetworks:
             anml = ap.Anml()
-            network = anml.CreateAutomataNetwork(anmlId = keyword)
-            self._anmlNetworks[keyword] = (anml, network)
+            network = anml.CreateAutomataNetwork(anmlId = bucket)
+            self._anmlNetworks[bucket] = (anml, network)
         else:
-            network = self._anmlNetworks[keyword][1]
+            network = self._anmlNetworks[bucket][1]
 
         # now add pattern to the network
         self._add_patterns(network, sid, patterns)
 
 
     def export(self, directory):
-        for keyword, anmlNetwork in self._anmlNetworks.iteritems():
-            anmlNetwork[1].ExportAnml(os.path.join(directory, keyword + '.anml'))
+        """
+        Write out all the ANML-NFAs to the given directory.
+        """
+        for bucket, anmlNetwork in self._anmlNetworks.iteritems():
+            anmlNetwork[1].ExportAnml(os.path.join(directory, bucket + '.anml'))
 
     def compile(self, directory):
-        for keyword, anmlNetwork in self._anmlNetworks.iteritems():
+        """
+        Compile all the ANML-NFAs and write the AP-FSMs to the given directory.
+        """
+        for bucket, anmlNetwork in self._anmlNetworks.iteritems():
             #if 'general' not in keyword:
                 #continue
-            print '\nCompiling %s\n'%keyword
+            print '\nCompiling %s\n'%bucket
             try:
                 automata, emap = anmlNetwork[0].CompileAnml()
                 info = automata.GetInfo()
                 print 'Clock divisor', info.clock_divisor
-                automata.Save(os.path.join(directory, keyword + '.fsm'))
+                automata.Save(os.path.join(directory, bucket + '.fsm'))
             except ap.ApError, e:
                 sys.stderr.write('\nCompilation failed with the following error message.\n%s\n'%(str(e)))
                 sys.stderr.flush()
