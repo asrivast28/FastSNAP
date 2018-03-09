@@ -30,6 +30,8 @@ if __name__ == '__main__':
     parser = ArgumentParser(description = 'Generate ANML-NFA/AP-FSM from Snort rules.')
     parser.add_argument('rules', help = 'the directory/file from which the Snort rules are to be read',
                         type = RulesPath)
+    parser.add_argument('-o', '--out', help = 'directory to which all the files should be written',
+                        default = os.getcwd(), metavar = 'DIR')
     parser.add_argument('-m', '--maxstes', help = 'maximum number of STEs per rule in a bucket',
                         type = int, default = 0, metavar = 'S')
     parser.add_argument('-r', '--maxrepeats', help = 'maximum number of bounded repetitions',
@@ -42,26 +44,28 @@ if __name__ == '__main__':
                         action = 'store_true')
     parser.add_argument('-c', '--compile', help = 'compile the generated ANML-NFAs to get AP-FSMs',
                         action = 'store_true')
-    parser.add_argument('-l', '--logging', help = 'enable logging',
+    parser.add_argument('-l', '--logging', help = 'enable error logging',
                         action = 'store_true')
     args = parser.parse_args()
 
-    with open('error.log', 'wb') as e:
-        if args.logging:
-            sys.stderr = e
+    if not os.path.exists(args.out):
+        os.makedirs(args.out)
 
-        t1 = time.time()
-        converter = RulesConverter(args.independent, args.negations, args.backreferences, args.maxstes, args.maxrepeats, args.compile)
-        # convert the rules
-        converter.convert(args.rules)
-        t1 = time.time() - t1
-        print '\nTotal time taken in converting the rules:', t1
+    if args.logging:
+        sys.stderr = open(os.path.join(args.out, 'error.log'), 'wb')
 
-        # export them as ANML
-        t2 = time.time()
-        converter.export('test_anml', args.compile)
-        t2 = time.time() - t2
-        print 'Total time taken in exporting:', t2
+    t1 = time.time()
+    converter = RulesConverter(args.independent, args.negations, args.backreferences, args.maxstes, args.maxrepeats, args.compile)
+    # convert the rules
+    converter.convert(args.rules)
+    t1 = time.time() - t1
+    print '\nTotal time taken in converting the rules:', t1
 
-        if args.logging:
-            sys.stderr = sys.__stderr__
+    # export them as ANML
+    t2 = time.time()
+    converter.export(args.out, args.compile)
+    t2 = time.time() - t2
+    print 'Total time taken in exporting:', t2
+
+    if args.logging:
+        sys.stderr = sys.__stderr__
