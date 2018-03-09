@@ -20,22 +20,22 @@ if __name__ == '__main__':
             raise ArgumentTypeError, 'The provided path is neither a file nor a directory!'
         return allFiles
 
-    parser = ArgumentParser()
-    parser.add_argument('rules', help = 'Specify the directory/file from which rules are to be extracted.',
+    parser = ArgumentParser(description = 'Generate ANML-NFA/AP-FSM from Snort rules.')
+    parser.add_argument('rules', help = 'the directory/file from which the Snort rules are to be read',
                         type = RulesPath)
-    parser.add_argument('-i', '--independent', help = 'Flag for specifying that independent patterns should be handled.',
+    parser.add_argument('-m', '--maxstes', help = 'maximum number of STEs per rule in a bucket',
+                        type = int, default = 0, metavar = 'S')
+    parser.add_argument('-r', '--maxrepeats', help = 'maximum number of bounded repetitions',
+                        type = int, default = 0, metavar = 'R')
+    parser.add_argument('-i', '--independent', help = 'handle independent patterns in a rule',
                         action = 'store_true')
-    parser.add_argument('-n', '--negations', help = 'Flag for specifying that negations should be handled.',
+    parser.add_argument('-n', '--negations', help = 'handle negated patterns',
                         action = 'store_true')
-    parser.add_argument('-b', '--backreferences', help = 'Flag for specifying that back references should be handled.',
+    parser.add_argument('-b', '--backreferences', help = 'handle back references in patterns',
                         action = 'store_true')
-    parser.add_argument('-s', '--maxstes', help = 'Maximum number of STEs allowed for one rule to be added in a bucket.',
-                        type = int, default = 0, metavar = 'N')
-    parser.add_argument('-r', '--maxrepeats', help = 'Maximum number of bounded repetitions.',
-                        type = int, default = 0, metavar = 'N')
-    parser.add_argument('-c', '--compile', help = 'Flag for specifying that the generated anml should be compiled.',
+    parser.add_argument('-c', '--compile', help = 'compile the generated ANML-NFAs to get AP-FSMs',
                         action = 'store_true')
-    parser.add_argument('-l', '--logging', help = 'Flag for specifying that logging should be enabled.',
+    parser.add_argument('-l', '--logging', help = 'enable logging',
                         action = 'store_true')
     args = parser.parse_args()
 
