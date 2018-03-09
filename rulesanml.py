@@ -10,7 +10,7 @@ import os
 import re
 import sys
 
-from parser import RegexParser
+from regexparser import RegexParser
 
 class AnmlException(exceptions.Exception):
     pass

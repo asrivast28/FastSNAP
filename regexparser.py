@@ -1,4 +1,10 @@
-# This file modifies/builds on Xeger,
+##
+# @file regexparser.py
+# @author Ankit Srivastava <asrivast@gatech.edu>
+# @version 1.0
+# @date 2018-03-09
+#
+# This file modifies and builds on Xeger,
 # which can be found at https://bitbucket.org/leapfrogdevelopment/rstr
 
 import re
