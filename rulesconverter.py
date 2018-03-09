@@ -146,10 +146,11 @@ class RulesConverter(object):
                 supportedRules.extend(fileSupportedRules)
         return supportedRules, totalRuleCount, patternRuleCount
 
-    def __init__(self, independent, negations, backreferences, maxStes, maxRepeats, compile):
+    def __init__(self, directory, maxStes, maxRepeats, independent, negations, backreferences, compile):
         """
         Constructor. Stores some of the program options.
         """
+        self._directory = directory
         self._independent = independent
         self._negations = negations
         self._compile = compile
@@ -367,11 +368,10 @@ class RulesConverter(object):
         self._print_statistics(totalRuleCount, patternRuleCount, len(allRules), len(sids - unsupported))
         #print self._patternCount
 
-    def export(self, directory, compile):
+    def export(self):
         """
         Write out the ANML-NFA or the AP-FSM to the given directory.
         """
+        self._anml.export(self._directory)
         if self._compile:
-            self._anml.compile(directory)
-        else:
-            self._anml.export(directory)
+            self._anml.compile(self._directory)

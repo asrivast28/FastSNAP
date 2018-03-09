@@ -19,7 +19,7 @@ class RulesAnml(object):
     """
     Class for storing ANML-NFAs corresponding to the Snort rules.
     """
-    def __init__(self, maxStes = 0, maxRepeats = 0, backreferences = False):
+    def __init__(self, directory, maxStes = 0, maxRepeats = 0, backreferences = False):
         self._maxStes = maxStes
         self._maxRepeats = maxRepeats
         self._backreferences = backreferences
@@ -28,11 +28,11 @@ class RulesAnml(object):
 
         if self._maxRepeats > 0:
             self._repetitionSids = set()
-            self._repetitionFile = open('repetitions.txt', 'wb')
+            self._repetitionFile = open(os.path.join(directory, 'repetitions.txt'), 'wb')
 
         if self._backreferences:
             self._backreferenceSids = set()
-            self._backreferenceFile = open('backreferences.txt', 'wb')
+            self._backreferenceFile = open(os.path.join(directory, 'backreferences.txt'), 'wb')
 
         self._orAnchorPattern = re.compile(r'^\/(?P<before>.*)(?P<start>\(|\(.*?\|)\$(?P<end>\|.*?\)|\))(?P<after>(?:\)*))\/(?P<modifiers>\w*)$')
         self._anchorPattern = re.compile(r'^\/(?P<open>(?:\(\?\w*:)?)(?P<start>\^?)(?P<pattern>.*?)(?<!\\)(?P<end>\$?)(?P<close>(?:\)*))\/(?P<modifiers>\w*)$')

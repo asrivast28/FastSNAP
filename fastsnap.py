@@ -55,7 +55,7 @@ if __name__ == '__main__':
         sys.stderr = open(os.path.join(args.out, 'error.log'), 'wb')
 
     t1 = time.time()
-    converter = RulesConverter(args.independent, args.negations, args.backreferences, args.maxstes, args.maxrepeats, args.compile)
+    converter = RulesConverter(args.out, args.maxstes, args.maxrepeats, args.independent, args.negations, args.backreferences, args.compile)
     # convert the rules
     converter.convert(args.rules)
     t1 = time.time() - t1
@@ -63,7 +63,7 @@ if __name__ == '__main__':
 
     # export them as ANML
     t2 = time.time()
-    converter.export(args.out, args.compile)
+    converter.export()
     t2 = time.time() - t2
     print 'Total time taken in exporting:', t2
 
