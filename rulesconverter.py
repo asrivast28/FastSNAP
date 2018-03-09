@@ -158,7 +158,7 @@ class RulesConverter(object):
         self._sids = set()
         self._unsupported = set()
 
-        self._anml = RulesAnml(maxStes, maxRepeats, backreferences)
+        self._anml = RulesAnml(directory, maxStes, maxRepeats, backreferences)
 
         self._patternCount = defaultdict(int)
 
