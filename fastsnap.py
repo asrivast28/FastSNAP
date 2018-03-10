@@ -4,8 +4,6 @@
 # @file fastsnap.py
 # @brief Driver script for converting Snort rules.
 # @author Ankit Srivastava <asrivast@gatech.edu>
-# @version 1.0
-# @date 2018-03-09
 #
 # Copyright 2018 Georgia Institute of Technology
 #
