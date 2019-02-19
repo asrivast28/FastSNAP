@@ -17,5 +17,6 @@ The above is the most conservative mode of operation. Flags can be used to enabl
 python fastsnap.py --help
 ```
 
-## Publication
-Roy, Indranil, Ankit Srivastava, Marziyeh Nourian, Michela Becchi, and Srinivas Aluru. "High Performance Pattern Matching using the Automata Processor." In _Parallel and Distributed Processing Symposium, 2016 IEEE International_, pp. 1123-1132. IEEE, 2016.
+## Publications
+* Roy, Indranil, Ankit Srivastava, Matt Grimm, Marziyeh Nourian, Michela Becchi, and Srinivas Aluru. "Evaluating High Performance Pattern Matching on the Automata Processor." _IEEE Transactions on Computers_ (2019).
+* Roy, Indranil, Ankit Srivastava, Marziyeh Nourian, Michela Becchi, and Srinivas Aluru. "High Performance Pattern Matching using the Automata Processor." In _Parallel and Distributed Processing Symposium, 2016 IEEE International_, pp. 1123-1132. IEEE, 2016.
